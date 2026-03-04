@@ -54,7 +54,7 @@ pub struct SyncParams {
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct QueueUpdateParams {
   #[schemars(
-    description = "Action: 'set_queue' (replace queue), 'start' (mark challenge in-progress), 'complete' (remove from in-progress), 'fail' (record failure), 'clear' (reset all)"
+    description = "Action: 'set_queue' (replace queue), 'start' (mark in-progress), 'complete' (remove from in-progress), 'fail' (record failure), 'prioritize' (move to front of queue / rescue from failed), 'retry' (move failed challenge back to queue), 'clear' (reset all)"
   )]
   pub action: String,
   #[schemars(description = "Challenge name (for start/complete/fail actions)")]

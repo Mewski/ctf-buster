@@ -417,7 +417,7 @@ impl McpServer {
   }
 
   #[tool(
-    description = "Update the challenge queue — set priorities, mark challenges as in-progress or failed. Persists across agent restarts."
+    description = "Update the challenge queue — set priorities, mark challenges as in-progress or failed, prioritize specific challenges, or retry failed ones. Persists across agent restarts."
   )]
   async fn ctf_queue_update(
     &self,
@@ -461,12 +461,68 @@ impl McpServer {
           notes: params.notes.unwrap_or_else(|| "failed".to_string()),
         });
       }
+      "prioritize" => {
+        let name = params
+          .challenge
+          .ok_or_else(|| McpError::invalid_params("challenge required for prioritize", None))?;
+        // Find the challenge in queue, remove it, give it max priority, insert at front
+        let name_lower = name.to_lowercase();
+        if let Some(pos) = orch.queue.iter().position(|q| q.name.to_lowercase() == name_lower) {
+          let mut entry = orch.queue.remove(pos);
+          // Set priority higher than everything else
+          let max_priority = orch.queue.iter().map(|q| q.priority).max().unwrap_or(0);
+          entry.priority = max_priority + 100;
+          orch.queue.insert(0, entry);
+        } else {
+          // Check if it's in failed list — pull it back into queue at front
+          if let Some(failed_pos) = orch.failed.iter().position(|f| f.name.to_lowercase() == name_lower) {
+            let failed = orch.failed.remove(failed_pos);
+            let max_priority = orch.queue.iter().map(|q| q.priority).max().unwrap_or(0);
+            orch.queue.insert(0, state::QueuedChallenge {
+              name: failed.name,
+              category: failed.category,
+              priority: max_priority + 100,
+              points: 0, // Unknown from failed state; auto_queue will fix on next run
+            });
+          } else if orch.in_progress.iter().any(|n| n.to_lowercase() == name_lower) {
+            return Ok(CallToolResult::success(vec![Content::text(format!(
+              "'{}' is already in progress.", name
+            ))]));
+          } else {
+            return Err(McpError::invalid_params(
+              format!("Challenge '{}' not found in queue or failed list.", name),
+              None,
+            ));
+          }
+        }
+      }
+      "retry" => {
+        let name = params
+          .challenge
+          .ok_or_else(|| McpError::invalid_params("challenge required for retry", None))?;
+        // Move from failed back to queue with reduced priority
+        let name_lower = name.to_lowercase();
+        if let Some(pos) = orch.failed.iter().position(|f| f.name.to_lowercase() == name_lower) {
+          let failed = orch.failed.remove(pos);
+          orch.queue.push(state::QueuedChallenge {
+            name: failed.name,
+            category: failed.category,
+            priority: -5, // Low priority retry; auto_queue will rescore
+            points: 0,
+          });
+        } else {
+          return Err(McpError::invalid_params(
+            format!("Challenge '{}' not in the failed list.", name),
+            None,
+          ));
+        }
+      }
       "clear" => {
         orch = state::OrchestrationState::default();
       }
       other => {
         return Err(McpError::invalid_params(
-          format!("Unknown action: {other}. Use set_queue, start, complete, fail, or clear."),
+          format!("Unknown action: {other}. Use set_queue, start, complete, fail, prioritize, retry, or clear."),
           None,
         ));
       }
@@ -511,11 +567,20 @@ impl McpServer {
       state::merge_cached_details(&mut challenges, &ws_state);
     }
 
-    // Filter to unsolved only
-    let unsolved: Vec<_> = challenges.iter().filter(|c| !c.solved_by_me).collect();
-
-    // Also check what's already failed to deprioritize
+    // Load orchestration state for in_progress and failed lists
     let orch = state::load_orchestration(&self.workspace_root).map_err(to_mcp_error)?;
+
+    // Skip solved and already in-progress challenges
+    let in_progress_names: std::collections::HashSet<String> = orch
+      .in_progress
+      .iter()
+      .map(|n| n.to_lowercase())
+      .collect();
+    let unsolved: Vec<_> = challenges
+      .iter()
+      .filter(|c| !c.solved_by_me && !in_progress_names.contains(&c.name.to_lowercase()))
+      .collect();
+
     let failed_names: std::collections::HashSet<String> = orch
       .failed
       .iter()
@@ -600,15 +665,15 @@ impl McpServer {
     Parameters(params): Parameters<SolvePromptParams>,
   ) -> Result<CallToolResult, McpError> {
     let ws_state = state::load_state(&self.workspace_root).map_err(to_mcp_error)?;
-    let orch = state::load_orchestration(&self.workspace_root).map_err(to_mcp_error)?;
+    let mut orch = state::load_orchestration(&self.workspace_root).map_err(to_mcp_error)?;
 
     // Determine which challenges to generate prompts for
-    let targets: Vec<&state::QueuedChallenge> = if let Some(ref name) = params.challenge {
+    let targets: Vec<state::QueuedChallenge> = if let Some(ref name) = params.challenge {
       // Specific challenge requested
       let name_lower = name.to_lowercase();
       let found = orch.queue.iter().find(|q| q.name.to_lowercase() == name_lower);
       if let Some(q) = found {
-        vec![q]
+        vec![q.clone()]
       } else {
         // Not in queue — check if it exists in state at all
         if ws_state.challenges.contains_key(&name_lower) {
@@ -624,7 +689,7 @@ impl McpServer {
       }
     } else {
       let count = params.count.unwrap_or(1);
-      orch.queue.iter().take(count).collect()
+      orch.queue.iter().take(count).cloned().collect()
     };
 
     if targets.is_empty() {
@@ -632,6 +697,17 @@ impl McpServer {
         "Queue is empty. Run ctf_auto_queue to populate it.",
       )]));
     }
+
+    // Auto-mark selected challenges as in_progress
+    let target_names: Vec<String> = targets.iter().map(|t| t.name.clone()).collect();
+    for name in &target_names {
+      orch.queue.retain(|q| q.name != *name);
+      if !orch.in_progress.contains(name) {
+        orch.in_progress.push(name.clone());
+      }
+    }
+    orch.updated_at = Some(chrono::Utc::now());
+    state::update_orchestration(&self.workspace_root, orch.clone()).map_err(to_mcp_error)?;
 
     // Generate prompts
     let mut prompts = Vec::new();

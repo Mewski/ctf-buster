@@ -87,13 +87,18 @@ generation, and model selection automatically.
 Key orchestration rules:
 - **Always re-sync before each batch** — `ctf_sync()` catches solves from other subagents
   and teammates, preventing duplicate work
-- **Use `ctf_generate_solve_prompt`** — it generates complete, self-contained prompts with
-  descriptions, file lists, hints, tool suggestions, model recommendations, and step-by-step
-  instructions. No need to manually construct prompts.
+- **`ctf_generate_solve_prompt` auto-marks in_progress** — challenges are automatically
+  moved from queue to in_progress when prompts are generated, preventing duplicate work.
+  No need to manually call `ctf_queue_update(action='start')`.
+- **`ctf_auto_queue` skips in_progress** — won't re-queue challenges being actively worked on.
 - **State is shared** — `ctf_submit_flag` writes to `.ctf-state.json` which tracks every
   solve with timestamp, flag, and points. `ctf_auto_queue` reads this to skip solved ones.
 - **Parallel launches** — call multiple Task tools in a single message to launch subagents
   concurrently. Use `recommended_model` from the prompt generator for each.
+- **Prioritize specific challenges** — use `ctf_queue_update(action='prioritize', challenge='X')`
+  to move a challenge to the front of the queue (also rescues from the failed list).
+- **Retry failures** — use `ctf_queue_update(action='retry', challenge='X')` to move a
+  failed challenge back to the queue for another attempt.
 
 ### 4. Model Selection for Subagents
 

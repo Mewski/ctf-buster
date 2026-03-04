@@ -122,7 +122,10 @@ pub fn load_state(workspace_root: &Path) -> Result<WorkspaceState> {
 fn write_state(workspace_root: &Path, state: &WorkspaceState) -> Result<()> {
   let path = workspace_root.join(STATE_FILE);
   let content = serde_json::to_string_pretty(state)?;
-  std::fs::write(path, content)?;
+  // Atomic write: write to temp file then rename to prevent corruption
+  let tmp_path = path.with_extension("json.tmp");
+  std::fs::write(&tmp_path, &content)?;
+  std::fs::rename(&tmp_path, &path)?;
   Ok(())
 }
 
