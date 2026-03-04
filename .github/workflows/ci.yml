@@ -32,6 +32,6 @@ jobs:
         with:
           python-version: "3.13"
       - name: Install dependencies
-        run: pip install fastmcp pwntools requests pytest pytest-cov sympy z3-solver gmpy2 pycryptodome pillow numpy
+        run: pip install "fastmcp>=2.12,<4" pwntools requests pytest pytest-cov sympy z3-solver gmpy2 pycryptodome pillow numpy
       - name: Test
         run: python -m pytest tools/tests/ -q
