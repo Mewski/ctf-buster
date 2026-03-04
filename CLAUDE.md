@@ -185,6 +185,7 @@ For parallel execution, launch multiple subagents in a single message using the 
 - `crypto_identify` to detect encoding/cipher type
 - `crypto_transform_chain` for multi-step decode pipelines
 - `crypto_rsa_toolkit` for RSA challenges (auto-tries factordb, fermat, wiener, small-e)
+- `crypto_hash_crack` for hash cracking (MD5, SHA1/256/512, bcrypt — wordlists and rules)
 - `crypto_math_solve` with z3 mode for constraint problems
 - `crypto_frequency_analysis` for classical ciphers
 - `crypto_xor_analyze` for XOR/stream cipher challenges (known-plaintext, Kasiski, IC, brute force)
@@ -222,7 +223,7 @@ For parallel execution, launch multiple subagents in a single message using the 
 - `rev_strings_xrefs` to find functions referencing flag/password/key strings
 - `rev_cfg` to analyze control flow and branch conditions
 - `rev_diff` to compare patched vs original binaries
-- `gdb_break_inspect` to validate static analysis with runtime state
+- `gdb_run` for arbitrary GDB commands, `gdb_break_inspect` to validate static analysis with runtime state
 
 **Forensics/Stego challenges:** (solve.py is minimal — most work uses MCP tools, add extraction logic if needed)
 - `forensics_file_triage` first — get file type, metadata, embedded data, entropy

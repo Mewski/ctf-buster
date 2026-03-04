@@ -655,6 +655,7 @@ impl McpServer {
 Use crypto_identify to detect encoding/cipher type, then:\n\
 - Encoding/XOR: crypto_transform_chain for decode pipelines, crypto_xor_analyze for key recovery from ciphertext\n\
 - RSA: crypto_rsa_toolkit (auto-tries factordb, fermat, wiener, small-e)\n\
+- Hash cracking: crypto_hash_crack (MD5, SHA1/256/512, bcrypt, etc. with wordlists and rules)\n\
 - Constraints/math: crypto_math_solve (z3 for integer constraints, eval for sympy)\n\
 - Advanced (finite fields, lattice, DLP): crypto_sage_solve with a SageMath script\n\
 - Classical ciphers: crypto_frequency_analysis + crypto_transform_chain with rot/vigenere/atbash\n\
@@ -673,7 +674,7 @@ Start with rev_functions for an overview, then rev_decompile for pseudocode of k
 - Interesting strings: rev_strings_xrefs to find functions referencing flag/password/key\n\
 - Control flow: rev_cfg for branch conditions and basic blocks\n\
 - Binary diff: rev_diff for patched vs original\n\
-- Runtime validation: gdb_break_inspect to confirm static analysis\n\
+- Runtime validation: gdb_run for arbitrary GDB commands, gdb_break_inspect to confirm static analysis\n\
 - Automated solving: pwn_angr_analyze in auto/find_string mode for simple checks",
         "jail" | "jailed" | "pyjail" | "sandbox" | "escape" => "\
 Read the jail source code first, then use jail_analyze_source to identify restrictions.\n\
@@ -686,10 +687,11 @@ Test payloads interactively against the remote service via pwntools.",
 Use pwn_triage first (checksec, imports, dangerous functions, architecture), then:\n\
 - Buffer overflow: gdb_trace_input (cyclic pattern + crash), pwn_pattern_offset\n\
 - Format string: pwn_format_string to find offset and generate write payloads\n\
+- Disassembly: pwn_disassemble to read specific functions (complements rev_decompile)\n\
 - ROP: pwn_rop_gadgets for gadgets, pwn_pwntools_template for exploit skeleton\n\
 - Libc attacks: pwn_one_gadget on libc for single-gadget RCE, pwn_libc_lookup to identify libc from leaks\n\
 - Shellcode: pwn_shellcode_generate for payload generation\n\
-- Dynamic analysis: gdb_break_inspect, gdb_memory_dump, gdb_checksec_runtime\n\
+- Dynamic analysis: gdb_run for arbitrary GDB commands, gdb_break_inspect, gdb_memory_dump, gdb_checksec_runtime\n\
 - Auto-solve: pwn_angr_analyze for simple challenges",
         _ => "\
 Use forensics_file_triage on any downloaded files to determine content type, then:\n\

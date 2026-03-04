@@ -16,8 +16,7 @@ mcp = FastMCP(
     instructions=(
         "Binary exploitation (pwn) tools for CTF challenges. "
         "Start with pwn_triage for a comprehensive overview, then use "
-        "pwn_disassemble, pwn_rop_gadgets, pwn_pwntools_template, pwn_format_string, "
-        "pwn_one_gadget (single-gadget RCE in libc), or pwn_libc_lookup (identify libc "
+        "pwn_pwntools_template, pwn_format_string, or pwn_libc_lookup (identify libc "
         "version from leaked addresses) as needed."
     ),
 )
@@ -170,88 +169,6 @@ def pwn_triage(path: str) -> str:
     sections, architecture, and flags dangerous functions.
     """
     return _pwn_triage_impl(path)
-
-
-# ── disassemble ──────────────────────────────────────────────────────────────
-
-
-@mcp.tool()
-def pwn_disassemble(path: str, function: str = "main", count: int = 50) -> str:
-    """Disassemble a function or address range from a binary using radare2.
-
-    Args:
-        path: Path to the binary
-        function: Function name (e.g. "main", "vuln") or address (e.g. "0x401000")
-        count: Maximum number of instructions to disassemble
-    """
-    path = os.path.realpath(path)
-    if not os.path.isfile(path):
-        return json.dumps({"error": f"File not found: {path}"})
-
-    # Use r2 in batch mode
-    if function.startswith("0x"):
-        cmd = f"s {function}; pd {count}"
-    else:
-        cmd = f"aaa; s sym.{function}; pdf"
-
-    r = run_tool(["r2", "-q", "-c", cmd, path], timeout=30)
-    if r["returncode"] != 0 and not r["stdout"].strip():
-        # Try without sym. prefix
-        cmd = f"aaa; s {function}; pdf"
-        r = run_tool(["r2", "-q", "-c", cmd, path], timeout=30)
-
-    return json.dumps(
-        {
-            "function": function,
-            "disassembly": r["stdout"].strip(),
-            "error": r.get("error", "")
-            or (r["stderr"].strip() if r["returncode"] != 0 else ""),
-        },
-        indent=2,
-    )
-
-
-# ── find_rop_gadgets ─────────────────────────────────────────────────────────
-
-
-@mcp.tool()
-def pwn_rop_gadgets(
-    path: str, search: str = "", max_depth: int = 5, max_results: int = 50
-) -> str:
-    """Search for ROP gadgets in a binary using ROPgadget.
-
-    Args:
-        path: Path to the binary
-        search: Filter gadgets containing this string (e.g. "pop rdi", "ret", "syscall")
-        max_depth: Maximum gadget depth (default 5)
-        max_results: Maximum number of results to return
-    """
-    path = os.path.realpath(path)
-    if not os.path.isfile(path):
-        return json.dumps({"error": f"File not found: {path}"})
-
-    cmd = ["ROPgadget", "--binary", path, "--depth", str(max_depth)]
-    if search:
-        cmd.extend(["--only", search])
-
-    r = run_tool(cmd, timeout=60)
-    if r["returncode"] != 0:
-        return json.dumps({"error": r["stderr"] or r.get("error", "ROPgadget failed")})
-
-    gadgets = []
-    for line in r["stdout"].splitlines():
-        line = line.strip()
-        if " : " in line and line.startswith("0x"):
-            addr, _, insns = line.partition(" : ")
-            gadgets.append({"address": addr.strip(), "instructions": insns.strip()})
-
-    total = len(gadgets)
-    gadgets = gadgets[:max_results]
-
-    return json.dumps(
-        {"total_gadgets": total, "showing": len(gadgets), "gadgets": gadgets},
-        indent=2,
-    )
 
 
 # ── pattern_offset ───────────────────────────────────────────────────────────
@@ -745,54 +662,6 @@ def pwn_angr_analyze(
         result["error"] = str(e)
 
     return json.dumps(result, indent=2)
-
-
-# ── one_gadget ────────────────────────────────────────────────────────────────
-
-
-@mcp.tool()
-def pwn_one_gadget(
-    libc_path: str,
-) -> str:
-    """Find single-gadget RCE addresses in a libc binary using one_gadget.
-
-    Returns gadget addresses and their register/memory constraints.
-    Use these instead of full ROP chains when constraints are satisfiable.
-
-    Args:
-        libc_path: Path to the libc shared library
-    """
-    path = os.path.realpath(libc_path)
-    if not os.path.isfile(path):
-        return json.dumps({"error": f"File not found: {path}"})
-
-    r = run_tool(["one_gadget", path], timeout=60)
-    if r["returncode"] != 0:
-        return json.dumps(
-            {"error": r["stderr"] or r.get("error", "one_gadget failed")}, indent=2
-        )
-
-    gadgets = []
-    current = None
-    for line in r["stdout"].splitlines():
-        line = line.rstrip()
-        if line.startswith("0x"):
-            if current:
-                gadgets.append(current)
-            addr = line.split()[0]
-            current = {"address": addr, "constraints": [], "instructions": []}
-        elif current and line.startswith("constraints:"):
-            pass  # header line
-        elif current and line.strip().startswith("["):
-            current["constraints"].append(line.strip())
-        elif current and line.strip():
-            current["instructions"].append(line.strip())
-    if current:
-        gadgets.append(current)
-
-    return json.dumps(
-        {"libc": path, "gadget_count": len(gadgets), "gadgets": gadgets}, indent=2
-    )
 
 
 # ── libc_lookup ───────────────────────────────────────────────────────────────

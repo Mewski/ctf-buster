@@ -19,7 +19,7 @@ mcp = FastMCP(
         "File forensics and steganography tools for CTF challenges. "
         "Start with forensics_file_triage for a comprehensive overview, then use "
         "forensics_stego_analyze for steganography, forensics_extract_embedded for data carving, "
-        "forensics_image_analysis for deep image inspection, or forensics_volatility for memory dumps."
+        "or forensics_image_analysis for deep image inspection."
     ),
 )
 
@@ -730,88 +730,6 @@ def forensics_image_analysis(path: str, extract_lsb: bool = False) -> str:
                 f"{name} channel has {zero_bins}/256 empty bins — possible data hiding or manipulation"
             )
 
-    return json.dumps(result, indent=2)
-
-
-# ── volatility ────────────────────────────────────────────────────────────────
-
-
-@mcp.tool()
-def forensics_volatility(
-    dump_path: str,
-    plugin: str = "windows.info",
-    extra_args: str = "",
-    timeout: int = 120,
-) -> str:
-    """Run a volatility3 plugin on a memory dump for forensic analysis.
-
-    Args:
-        dump_path: Path to the memory dump file (.raw, .vmem, .dmp, etc.)
-        plugin: Volatility3 plugin name. Common plugins:
-            - windows.info: OS version and kernel info
-            - windows.pslist / linux.pslist: Process listing
-            - windows.pstree: Process tree
-            - windows.filescan: Find file objects in memory
-            - windows.dumpfiles: Extract files (use extra_args for --pid)
-            - windows.hashdump: Dump password hashes
-            - windows.cmdline: Command line arguments per process
-            - windows.netscan: Network connections
-            - linux.bash: Bash command history
-        extra_args: Additional arguments (space-separated), e.g. "--pid 1234"
-        timeout: Execution timeout in seconds (default 120, memory analysis can be slow)
-    """
-    path = os.path.realpath(dump_path)
-    if not os.path.isfile(path):
-        return json.dumps({"error": f"File not found: {path}"})
-
-    cmd = ["vol", "-f", path, plugin]
-    if extra_args:
-        cmd.extend(shlex.split(extra_args))
-
-    result = {"dump": path, "plugin": plugin}
-
-    # Try JSON renderer first
-    r = run_tool(cmd + ["-r", "json"], timeout=timeout)
-    if r["returncode"] == 0 and r["stdout"].strip():
-        try:
-            parsed = json.loads(r["stdout"])
-            result["data"] = parsed
-            result["renderer"] = "json"
-            return json.dumps(result, indent=2)
-        except json.JSONDecodeError:
-            pass
-
-    # Fallback to text output
-    r = run_tool(cmd, timeout=timeout)
-    if r["returncode"] != 0:
-        result["error"] = r["stderr"] or r.get("error", "volatility3 failed")
-        result["returncode"] = r["returncode"]
-        return json.dumps(result, indent=2)
-
-    lines = r["stdout"].strip().splitlines()
-    if len(lines) > 1:
-        headers = (
-            [h.strip() for h in lines[0].split("\t")]
-            if "\t" in lines[0]
-            else lines[0].split()
-        )
-        rows = []
-        for line in lines[1:500]:
-            if "\t" in line:
-                cells = [c.strip() for c in line.split("\t")]
-            else:
-                cells = line.split(None, max(len(headers) - 1, 0))
-            if len(cells) >= len(headers):
-                rows.append(dict(zip(headers, cells)))
-            else:
-                rows.append({"raw": line})
-        result["headers"] = headers
-        result["rows"] = rows
-        result["row_count"] = len(rows)
-    else:
-        result["raw_output"] = r["stdout"][:5000]
-
-    result["renderer"] = "text"
     return json.dumps(result, indent=2)
 
 

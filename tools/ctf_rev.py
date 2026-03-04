@@ -14,9 +14,8 @@ mcp = FastMCP(
     "ctf-rev",
     instructions=(
         "Reverse engineering tools for deep binary analysis. Use rev_functions for "
-        "function discovery, rev_decompile for pseudocode, rev_xrefs to trace call "
-        "graphs, rev_strings_xrefs to find string references in context, and rev_cfg "
-        "for control flow analysis. Start with rev_functions to get an overview."
+        "function discovery, rev_decompile for pseudocode, and rev_strings_xrefs to "
+        "find string references in context. Start with rev_functions to get an overview."
     ),
 )
 
@@ -92,91 +91,6 @@ def rev_functions(path: str) -> str:
             "path": path,
             "function_count": len(functions),
             "functions": functions,
-        },
-        indent=2,
-    )
-
-
-@mcp.tool()
-def rev_xrefs(path: str, target: str, direction: str = "both") -> str:
-    """Find cross-references to/from a function or address.
-
-    Args:
-        path: Path to the binary
-        target: Function name (e.g., "main") or hex address (e.g., "0x401234")
-        direction: "to" (who calls this), "from" (what this calls), or "both"
-
-    Returns:
-        JSON list of cross-references with source/destination addresses.
-    """
-    path = os.path.realpath(path)
-    if not os.path.isfile(path):
-        return json.dumps({"error": f"File not found: {path}"})
-
-    seek = target if target.startswith("0x") else f"sym.{target}"
-
-    xrefs_to = []
-    xrefs_from = []
-
-    if direction == "both":
-        # Single r2 invocation for both directions
-        result = _r2_cmd(
-            path,
-            ["aaa", f"s {seek}", "echo ===TO===", "axtj", "echo ===FROM===", "axfj"],
-        )
-        if result["returncode"] == 0:
-            output = result["stdout"]
-            if "===TO===" in output:
-                to_section = output.split("===TO===", 1)[1]
-                if "===FROM===" in to_section:
-                    to_section = to_section.split("===FROM===", 1)[0]
-                parsed = _parse_r2_json(to_section.strip())
-                if parsed:
-                    xrefs_to = parsed
-            if "===FROM===" in output:
-                from_section = output.split("===FROM===", 1)[1]
-                parsed = _parse_r2_json(from_section.strip())
-                if parsed:
-                    xrefs_from = parsed
-    elif direction == "to":
-        result = _r2_cmd(path, ["aaa", f"s {seek}", "axtj"])
-        if result["returncode"] == 0:
-            parsed = _parse_r2_json(result["stdout"])
-            if parsed:
-                xrefs_to = parsed
-    elif direction == "from":
-        result = _r2_cmd(path, ["aaa", f"s {seek}", "axfj"])
-        if result["returncode"] == 0:
-            parsed = _parse_r2_json(result["stdout"])
-            if parsed:
-                xrefs_from = parsed
-
-    parsed_to = [
-        {
-            "from_address": hex(x.get("from", 0)),
-            "to_address": hex(x.get("addr", 0)),
-            "type": x.get("type", ""),
-            "opcode": x.get("opcode", ""),
-        }
-        for x in xrefs_to
-    ]
-
-    parsed_from = [
-        {
-            "from_address": hex(x.get("from", 0)),
-            "to_address": hex(x.get("addr", 0)),
-            "type": x.get("type", ""),
-            "opcode": x.get("opcode", ""),
-        }
-        for x in xrefs_from
-    ]
-
-    return json.dumps(
-        {
-            "path": path,
-            "target": target,
-            "xrefs_to": parsed_to,
-            "xrefs_from": parsed_from,
         },
         indent=2,
     )
@@ -350,119 +264,6 @@ def rev_strings_xrefs(path: str, filter: str = "") -> str:
             "filter": filter,
             "count": len(strings),
             "strings": strings,
-        },
-        indent=2,
-    )
-
-
-@mcp.tool()
-def rev_cfg(path: str, function: str = "main") -> str:
-    """Extract control flow graph for a function.
-
-    Args:
-        path: Path to the binary
-        function: Function name or hex address (default: "main")
-
-    Returns:
-        JSON with basic blocks, instructions, and branch targets.
-    """
-    path = os.path.realpath(path)
-    if not os.path.isfile(path):
-        return json.dumps({"error": f"File not found: {path}"})
-
-    seek = function if function.startswith("0x") else f"sym.{function}"
-    if function == "main":
-        seek = "main"
-
-    result = _r2_cmd(path, ["aaa", f"s {seek}", "agfj"])
-    if result["returncode"] != 0 or not result["stdout"].strip():
-        return json.dumps(
-            {"error": "Failed to get CFG", "stderr": result["stderr"][:2000]}
-        )
-
-    cfg_raw = _parse_r2_json(result["stdout"])
-    if cfg_raw is None:
-        return json.dumps({"error": "Failed to parse CFG data"})
-
-    blocks = []
-    for block in cfg_raw:
-        parsed_block = {
-            "offset": hex(block.get("offset", 0)),
-            "size": block.get("size", 0),
-        }
-
-        if "ops" in block:
-            parsed_block["instructions"] = [
-                {
-                    "address": hex(op.get("offset", 0)),
-                    "opcode": op.get("disasm", op.get("opcode", "")),
-                    "type": op.get("type", ""),
-                }
-                for op in block["ops"]
-            ]
-            parsed_block["instruction_count"] = len(block["ops"])
-
-        if "jump" in block:
-            parsed_block["jump"] = hex(block["jump"])
-        if "fail" in block:
-            parsed_block["fail"] = hex(block["fail"])
-
-        blocks.append(parsed_block)
-
-    return json.dumps(
-        {
-            "path": path,
-            "function": function,
-            "block_count": len(blocks),
-            "blocks": blocks,
-        },
-        indent=2,
-    )
-
-
-@mcp.tool()
-def rev_diff(path1: str, path2: str) -> str:
-    """Compare two binaries to find differences (patched vs original).
-
-    Args:
-        path1: Path to the first (original) binary
-        path2: Path to the second (patched) binary
-
-    Returns:
-        JSON with list of byte-level differences.
-    """
-    path1 = os.path.realpath(path1)
-    path2 = os.path.realpath(path2)
-    if not os.path.isfile(path1):
-        return json.dumps({"error": f"File not found: {path1}"})
-    if not os.path.isfile(path2):
-        return json.dumps({"error": f"File not found: {path2}"})
-
-    summary_result = run_tool(["radiff2", "-c", path1, path2], timeout=60)
-    summary = summary_result["stdout"].strip()
-
-    detail_result = run_tool(["radiff2", path1, path2], timeout=60)
-    detail = detail_result["stdout"].strip()
-
-    diffs = []
-    for line in detail.splitlines():
-        parts = line.split()
-        if len(parts) >= 3 and parts[0].startswith("0x"):
-            diffs.append(
-                {
-                    "offset": parts[0],
-                    "original": parts[1] if len(parts) > 1 else "",
-                    "patched": parts[2] if len(parts) > 2 else "",
-                }
-            )
-
-    return json.dumps(
-        {
-            "file1": path1,
-            "file2": path2,
-            "summary": summary,
-            "differences": diffs[:500],
-            "diff_count": len(diffs),
         },
         indent=2,
     )

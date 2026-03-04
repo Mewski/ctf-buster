@@ -22,8 +22,7 @@ mcp = FastMCP(
         "Cryptographic analysis and encoding tools for CTF challenges. "
         "Use crypto_transform_chain for encoding/decoding pipelines, crypto_identify to detect "
         "encoding types, crypto_xor_analyze for XOR key recovery, crypto_rsa_toolkit for RSA attacks, "
-        "crypto_math_solve for constraint solving, crypto_sage_solve for SageMath scripts "
-        "(finite fields, lattice reduction, discrete log)."
+        "crypto_math_solve for constraint solving."
     ),
 )
 
@@ -563,88 +562,6 @@ def crypto_math_solve(mode: str, expression: str, variables: str = "") -> str:
     return json.dumps({"error": f"Unknown mode: {mode}"}, indent=2)
 
 
-# ── hash_crack ───────────────────────────────────────────────────────────────
-
-
-@mcp.tool()
-def crypto_hash_crack(hash_value: str, wordlist: str = "") -> str:
-    """Identify a hash type and attempt lightweight dictionary cracking.
-
-    Args:
-        hash_value: The hash string to identify/crack
-        wordlist: Optional newline-separated wordlist for cracking attempt. If empty, tries common passwords.
-    """
-    clean = hash_value.strip()
-    results = {"hash": clean, "length": len(clean), "possible_types": []}
-
-    # Identify
-    if len(clean) in HASH_PATTERNS:
-        results["possible_types"] = HASH_PATTERNS[len(clean)]
-
-    # Detect bcrypt
-    if clean.startswith("$2"):
-        results["possible_types"] = ["bcrypt"]
-    elif clean.startswith("$6$"):
-        results["possible_types"] = ["SHA-512 crypt"]
-    elif clean.startswith("$5$"):
-        results["possible_types"] = ["SHA-256 crypt"]
-    elif clean.startswith("$1$"):
-        results["possible_types"] = ["MD5 crypt"]
-
-    # Quick crack attempt
-    if wordlist:
-        words = wordlist.strip().splitlines()
-    else:
-        words = [
-            "password",
-            "123456",
-            "admin",
-            "flag",
-            "test",
-            "root",
-            "letmein",
-            "qwerty",
-            "abc123",
-            "monkey",
-            "master",
-            "dragon",
-            "login",
-            "princess",
-            "football",
-            "shadow",
-            "sunshine",
-            "trustno1",
-            "iloveyou",
-            "batman",
-            "access",
-            "hello",
-            "charlie",
-            "password1",
-        ]
-
-    hash_funcs = {
-        32: [("md5", hashlib.md5)],
-        40: [("sha1", hashlib.sha1)],
-        64: [("sha256", hashlib.sha256)],
-        128: [("sha512", hashlib.sha512)],
-    }
-
-    if len(clean) in hash_funcs and not clean.startswith("$"):
-        for word in words:
-            for name, func in hash_funcs[len(clean)]:
-                if func(word.encode()).hexdigest() == clean.lower():
-                    results["cracked"] = True
-                    results["plaintext"] = word
-                    results["hash_type"] = name
-                    return json.dumps(results, indent=2)
-
-    results["cracked"] = False
-    results["note"] = (
-        f"Tried {len(words)} words, no match. Use hashcat/john for full wordlists."
-    )
-    return json.dumps(results, indent=2)
-
-
 # ── frequency_analysis ───────────────────────────────────────────────────────
 
 
@@ -931,56 +848,6 @@ def crypto_xor_analyze(
             }
 
     return json.dumps(result, indent=2)
-
-
-# ── sage_solve ────────────────────────────────────────────────────────────────
-
-
-@mcp.tool()
-def crypto_sage_solve(
-    script: str,
-    timeout: int = 60,
-) -> str:
-    """Execute a SageMath script for advanced cryptographic computations.
-
-    Runs the given Sage code and captures output. Use for finite field arithmetic,
-    lattice reduction (LLL), discrete logarithm, polynomial solving over GF(p), etc.
-
-    Args:
-        script: SageMath code to execute. The script should print() its results.
-        timeout: Execution timeout in seconds (default 60)
-
-    Example:
-        crypto_sage_solve("p = 2^127 - 1; print(is_prime(p))")
-        crypto_sage_solve("R.<x> = GF(7)[]; print(factor(x^3 + 2*x + 1))")
-    """
-    import shutil
-    import tempfile
-
-    sage_path = shutil.which("sage")
-    if not sage_path:
-        return json.dumps({"error": "sage not found in PATH"}, indent=2)
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".sage", delete=False) as f:
-        f.write(script)
-        tmp = f.name
-
-    try:
-        r = run_tool(["sage", tmp], timeout=timeout)
-        result: dict = {
-            "stdout": r["stdout"],
-            "stderr": r["stderr"],
-            "returncode": r["returncode"],
-        }
-        if r.get("error"):
-            result["error"] = r["error"]
-        try:
-            result["parsed"] = json.loads(r["stdout"])
-        except (json.JSONDecodeError, ValueError):
-            pass
-        return json.dumps(result, indent=2)
-    finally:
-        os.unlink(tmp)
 
 
 if __name__ == "__main__":
