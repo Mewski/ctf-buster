@@ -1,6 +1,6 @@
 use std::path::Path;
 use std::sync::Arc;
-use tokio::sync::OnceCell;
+use tokio::sync::Mutex;
 
 use async_trait::async_trait;
 use reqwest::Client;
@@ -19,16 +19,27 @@ pub struct CtfdPlatform {
   base_url: String,
   auth: AuthMethod,
   client: Client,
-  csrf_nonce: OnceCell<String>,
+  csrf_nonce: Mutex<Option<String>>,
 }
 
 impl CtfdPlatform {
   pub fn new(url: String, token: String) -> Self {
     let base_url = url.trim_end_matches('/').to_string();
 
-    // Detect if this is a session cookie (contains a dot separator typical of Flask sessions)
-    // vs an API token (typically alphanumeric hex)
-    let (auth, client) = if token.contains('.') && !token.starts_with("ctfd_") {
+    // Detect if this is a session cookie vs an API token.
+    // Flask session cookies: base64.base64.base64 (3 dot-separated parts, with base64 chars)
+    // API tokens: hex strings, or prefixed with "ctfd_"
+    // JWT tokens (rCTF style): also 3 dot-separated base64 parts but handled by rctf platform
+    let is_session_cookie = {
+      let parts: Vec<&str> = token.split('.').collect();
+      // Flask sessions have exactly 3 dot-separated parts and don't start with "ctfd_"
+      // Also exclude pure hex strings that happen to contain dots
+      !token.starts_with("ctfd_")
+        && parts.len() >= 2
+        && parts.iter().all(|p| !p.is_empty())
+        && !token.chars().all(|c| c.is_ascii_hexdigit())
+    };
+    let (auth, client) = if is_session_cookie {
       // Session cookie — build client with cookie jar
       let jar = Arc::new(reqwest::cookie::Jar::default());
       let url_parsed: url::Url = base_url
@@ -48,34 +59,83 @@ impl CtfdPlatform {
       base_url,
       auth,
       client,
-      csrf_nonce: OnceCell::new(),
+      csrf_nonce: Mutex::new(None),
     }
   }
 
   /// Fetch CSRF nonce from CTFd (needed for session-based POST requests).
-  async fn get_csrf_nonce(&self) -> Result<&str> {
-    self
-      .csrf_nonce
-      .get_or_try_init(|| async {
-        let resp = self
-          .client
-          .get(format!("{}/challenges", self.base_url))
-          .send()
-          .await?;
-        let html = resp.text().await?;
-        let nonce = html
-          .find("csrfNonce")
-          .and_then(|pos| {
-            let after = &html[pos..];
-            let quote_start = after.find('"')? + 1;
-            let quote_end = quote_start + after[quote_start..].find('"')?;
-            Some(after[quote_start..quote_end].to_string())
-          })
-          .ok_or_else(|| Error::Platform("Could not find CSRF nonce in CTFd page".into()))?;
-        Ok(nonce)
+  /// Caches the nonce; call `refresh_csrf_nonce` to force a re-fetch.
+  async fn get_csrf_nonce(&self) -> Result<String> {
+    let mut guard = self.csrf_nonce.lock().await;
+    if let Some(ref nonce) = *guard {
+      return Ok(nonce.clone());
+    }
+    let nonce = self.fetch_csrf_nonce().await?;
+    *guard = Some(nonce.clone());
+    Ok(nonce)
+  }
+
+  /// Force re-fetch the CSRF nonce (called on 403 errors).
+  async fn refresh_csrf_nonce(&self) -> Result<String> {
+    let mut guard = self.csrf_nonce.lock().await;
+    let nonce = self.fetch_csrf_nonce().await?;
+    *guard = Some(nonce.clone());
+    Ok(nonce)
+  }
+
+  async fn fetch_csrf_nonce(&self) -> Result<String> {
+    let resp = self
+      .client
+      .get(format!("{}/challenges", self.base_url))
+      .send()
+      .await?;
+    let status = resp.status();
+    let html = resp.text().await?;
+    if !status.is_success() {
+      return Err(Error::Platform(format!(
+        "Failed to fetch CSRF nonce (HTTP {status})"
+      )));
+    }
+    html
+      .find("csrfNonce")
+      .and_then(|pos| {
+        let after = &html[pos..];
+        let quote_start = after.find('"')? + 1;
+        let quote_end = quote_start + after[quote_start..].find('"')?;
+        Some(after[quote_start..quote_end].to_string())
       })
-      .await
-      .map(|s| s.as_str())
+      .ok_or_else(|| Error::Platform("Could not find csrfNonce in CTFd page".into()))
+  }
+
+  /// Fetch the set of challenge IDs that the current user/team has solved.
+  /// Works with both token and session auth by checking solves endpoints.
+  async fn fetch_my_solve_ids(&self) -> Result<std::collections::HashSet<String>> {
+    // Try /teams/me/solves first (team mode), fall back to /users/me/solves
+    let body = match self.get("/teams/me/solves").await {
+      Ok(b) => b,
+      Err(_) => match self.get("/users/me/solves").await {
+        Ok(b) => b,
+        Err(_) => return Ok(std::collections::HashSet::new()),
+      },
+    };
+
+    let data = body
+      .get("data")
+      .and_then(|d| d.as_array())
+      .cloned()
+      .unwrap_or_default();
+
+    let ids: std::collections::HashSet<String> = data
+      .iter()
+      .filter_map(|solve| {
+        solve
+          .get("challenge_id")
+          .and_then(|id| id.as_u64())
+          .map(|id| id.to_string())
+      })
+      .collect();
+
+    Ok(ids)
   }
 
   fn api_url(&self, path: &str) -> String {
@@ -118,6 +178,22 @@ impl CtfdPlatform {
   }
 
   async fn post(&self, path: &str, payload: &serde_json::Value) -> Result<serde_json::Value> {
+    let result = self.post_inner(path, payload).await;
+
+    // On 403 with session auth, the CSRF nonce may have expired — refresh and retry once
+    if matches!(self.auth, AuthMethod::Session) {
+      if let Err(Error::Platform(ref msg)) = result {
+        if msg.contains("403") {
+          self.refresh_csrf_nonce().await?;
+          return self.post_inner(path, payload).await;
+        }
+      }
+    }
+
+    result
+  }
+
+  async fn post_inner(&self, path: &str, payload: &serde_json::Value) -> Result<serde_json::Value> {
     let mut req = self
       .client
       .post(self.api_url(path))
@@ -127,7 +203,7 @@ impl CtfdPlatform {
     // Session auth requires CSRF nonce on POST requests
     if matches!(self.auth, AuthMethod::Session) {
       let nonce = self.get_csrf_nonce().await?;
-      req = req.header("CSRF-Token", nonce);
+      req = req.header("CSRF-Token", &nonce);
     }
     let resp = req.send().await?;
 
@@ -261,7 +337,21 @@ impl Platform for CtfdPlatform {
       .ok_or_else(|| Error::Platform("Missing data field".into()))?;
 
     let ctfd_challenges: Vec<CtfdChallenge> = serde_json::from_value(data.clone())?;
-    Ok(ctfd_challenges.into_iter().map(|c| c.into()).collect())
+    let mut challenges: Vec<Challenge> = ctfd_challenges.into_iter().map(|c| c.into()).collect();
+
+    // Some CTFd versions don't return solved_by_me in the list endpoint,
+    // or return null for session/cookie auth. Cross-reference with the
+    // user/team solves endpoint to ensure accurate solve status.
+    let solved_ids = self.fetch_my_solve_ids().await.unwrap_or_default();
+    if !solved_ids.is_empty() {
+      for c in &mut challenges {
+        if solved_ids.contains(&c.id) {
+          c.solved_by_me = true;
+        }
+      }
+    }
+
+    Ok(challenges)
   }
 
   async fn challenge(&self, id: &str) -> Result<Challenge> {
@@ -535,5 +625,25 @@ mod tests {
       "ctfd_abcdef.1234567890".into(),
     );
     assert!(matches!(plat.auth, AuthMethod::Token(_)));
+  }
+
+  #[test]
+  fn auth_method_pure_hex_is_token() {
+    // Pure hex string without dots — definitely an API token
+    let plat = CtfdPlatform::new(
+      "https://ctf.example.com".into(),
+      "a1b2c3d4e5f6".into(),
+    );
+    assert!(matches!(plat.auth, AuthMethod::Token(_)));
+  }
+
+  #[test]
+  fn auth_method_flask_session_with_three_parts() {
+    // Typical Flask session: base64.timestamp.signature
+    let plat = CtfdPlatform::new(
+      "https://ctf.example.com".into(),
+      "eyJpZCI6MX0.ZxYzAw.aBcDeFgHiJkLmNoPqRsTuVwXyZ".into(),
+    );
+    assert!(matches!(plat.auth, AuthMethod::Session));
   }
 }

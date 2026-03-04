@@ -1,0 +1,31 @@
+{
+  "mcpServers": {
+    "ctf-buster": {
+      "command": "./target/release/ctf",
+      "args": ["mcp", "--workspace", "."],
+      "env": {
+        "CTF_TOKEN": "${CTF_TOKEN}"
+      }
+    },
+    "ctf-crypto": {
+      "command": "python3",
+      "args": ["./tools/ctf_crypto.py"]
+    },
+    "ctf-binary": {
+      "command": "python3",
+      "args": ["./tools/ctf_binary.py"]
+    },
+    "ctf-forensics": {
+      "command": "python3",
+      "args": ["./tools/ctf_forensics.py"]
+    },
+    "ctf-gdb": {
+      "command": "python3",
+      "args": ["./tools/ctf_gdb.py"]
+    },
+    "ctf-re": {
+      "command": "python3",
+      "args": ["./tools/ctf_re.py"]
+    }
+  }
+}

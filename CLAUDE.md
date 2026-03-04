@@ -73,16 +73,29 @@ while unsolved challenges remain:
   1. ctf_sync(full=true)                   # Fetch challenges + descriptions + files
   2. ctf_auto_queue()                      # Auto-score and queue all unsolved
   3. ctf_generate_solve_prompt(count=N)    # Get prompts for top N (typically 3-5)
-  4. Launch subagents (Task tool) in parallel using the generated prompts
-     — each prompt includes: challenge info, model recommendation, tool hints, steps
-  5. Collect results from subagents
-  6. For any failures: ctf_queue_update(action='fail', challenge='...', notes='...')
-  7. Loop back to step 1 (re-sync catches team solves, new challenges)
+     — returns JSON with: prompt, recommended_model, subagent_type per challenge
+     — auto-marks selected challenges as in_progress
+  4. Launch subagents via Task tool — one per challenge, in parallel:
+     Task(
+       description="Solve <challenge_name>",
+       prompt=<prompt from step 3>,
+       model=<recommended_model from step 3>,  // "opus", "sonnet", or "haiku"
+       subagent_type="general-purpose"
+     )
+     Launch ALL in a single message for parallel execution.
+  5. Wait for subagents to return. Each will report: solved/unsolved/needs-help
+     Subagents auto-submit flags and auto-mark queue state (complete/fail).
+  6. Check progress: ctf_challenges(unsolved=true) to see what's left
+  7. Loop back to step 1 (re-sync catches team solves and new challenges)
 ```
 
 **One-command start:** When asked to "solve this CTF" or "start solving", execute steps
 1-4 immediately without asking for confirmation. The tools handle all scoring, prompt
 generation, and model selection automatically.
+
+**Result handling:** Subagents call `ctf_queue_update(action='complete')` on success and
+`ctf_queue_update(action='fail')` on failure. When all subagents return, call
+`ctf_challenges(unsolved=true)` to see remaining work. If challenges remain, loop.
 
 Key orchestration rules:
 - **Always re-sync before each batch** — `ctf_sync()` catches solves from other subagents
@@ -102,28 +115,29 @@ Key orchestration rules:
 
 ### 4. Model Selection for Subagents
 
-Select the model based on challenge characteristics:
+`ctf_generate_solve_prompt` automatically selects the best model per challenge.
+The selection logic (you don't need to do this manually):
 
 **opus** (deep reasoning, complex multi-step):
-- Crypto requiring mathematical reasoning (RSA, discrete log, custom ciphers)
-- Binary exploitation (pwn) requiring exploit chain development
-- Challenges where the first attempt failed and need deeper analysis
+- Retries (any challenge that previously failed)
 - Any challenge worth > 300 points
+- Crypto and pwn challenges with low solve counts (hard)
 
 **sonnet** (fast, capable, good default):
 - Most challenges on first attempt
+- Easy crypto/pwn (high solve counts, priority >= 25)
 - Web challenges (pattern matching + known techniques)
 - Forensics/stego (tool-driven, follow the output)
 - Easy/medium crypto (simple encoding chains, known ciphers)
 - Rev challenges with clear structure
 
 **haiku** (fast, lightweight):
-- Challenges with known solution patterns (just need tool execution)
-- Re-attempting with a clear approach that failed on execution
+- Very easy challenges (priority >= 30, meaning high solve count + good category)
 - Simple encoding/decoding tasks
 - File extraction and triage-only tasks
 
-**Default: sonnet for first attempt, opus for retry on failure, haiku for pure tool execution.**
+**All automatic:** `ctf_generate_solve_prompt` returns the `recommended_model` field
+for each challenge. Just pass it to the Task tool's `model` parameter.
 
 ### 5. Subagent Structure
 
@@ -147,16 +161,17 @@ for prompt_data in result.prompts:
 
 The generated prompts follow this structure:
 1. Download files with ctf_download_files
-2. Triage with category-appropriate tools
-3. Analyze and solve
-4. AUTO-SUBMIT any flag-like strings immediately
-5. On correct flag, call ctf_save_writeup to document methodology
-6. Report back: solved/unsolved/needs-help
+2. Read solve.py — it has a category-appropriate template or prior work from a failed attempt
+3. Triage with category-appropriate tools
+4. Build solution in solve.py incrementally as you work
+5. AUTO-SUBMIT any flag-like strings immediately
+6. On correct flag, call ctf_save_writeup to document methodology
+7. Report back: solved/unsolved/needs-help
 
 **Flag detection rules for subagents:**
 - Scan ALL tool output (stdout, extracted data, decoded text, solver results) for flag patterns
 - Common patterns: `flag{...}`, `CTF{...}`, `FLAG{...}`, `ctf{...}`, or the competition-specific format from `ctf_workspace_status`
-- If a tool like `angr_analyze`, `transform_chain`, `rsa_toolkit`, or `stego_analyze` returns output containing a flag, **submit it immediately**
+- If a tool like `binary_angr_analyze`, `crypto_transform_chain`, `crypto_rsa_toolkit`, or `forensics_stego_analyze` returns output containing a flag, **submit it immediately**
 - When multiple flag candidates exist, submit each one — `ctf_submit_flag` reports correct/incorrect so you'll know which worked
 - Never hold a flag without submitting. The moment you see it, submit it.
 
@@ -164,16 +179,16 @@ For parallel execution, launch multiple subagents in a single message using the 
 
 ### 6. Category-Specific Approaches
 
-**Crypto challenges:**
+**Crypto challenges:** (solve.py has a minimal Python template — add your decode logic there)
 - `crypto_identify` to detect encoding/cipher type
-- `transform_chain` for multi-step decode pipelines
-- `rsa_toolkit` for RSA challenges (auto-tries factordb, fermat, wiener, small-e)
-- `math_solve` with z3 mode for constraint problems
-- `frequency_analysis` for classical ciphers
+- `crypto_transform_chain` for multi-step decode pipelines
+- `crypto_rsa_toolkit` for RSA challenges (auto-tries factordb, fermat, wiener, small-e)
+- `crypto_math_solve` with z3 mode for constraint problems
+- `crypto_frequency_analysis` for classical ciphers
 
-**Binary/Pwn challenges:**
+**Binary/Pwn challenges:** (solve.py has a pwntools skeleton with ELF/remote setup — fill in the exploit)
 - `binary_triage` first — get checksec, imports, dangerous functions, architecture
-- `disassemble` to read key functions
+- `binary_disassemble` to read key functions
 - `r2_decompile` for pseudocode (r2ghidra/r2dec fallback chain)
 - `r2_functions` to list all functions with sizes and call targets
 - `r2_xrefs` to trace call graphs and cross-references
@@ -184,16 +199,16 @@ For parallel execution, launch multiple subagents in a single message using the 
 - `gdb_memory_dump` to read memory at specific addresses during execution
 - `gdb_checksec_runtime` for runtime security info (ASLR, libc base, GOT, symbols)
 - `gdb_run` for general GDB command execution
-- `angr_analyze` for automatic solving of simple stack-based challenges:
+- `binary_angr_analyze` for automatic solving of simple stack-based challenges:
   - `auto` mode: finds inputs producing flag-like output
   - `find_addr` mode: finds inputs reaching a specific address
   - `find_string` mode: finds inputs causing specific output
-- `find_rop_gadgets` for ROP chains
-- `pattern_offset` to find buffer overflow offsets
-- `pwntools_template` to generate exploit scripts
-- `shellcode_generate` for shellcode payloads
+- `binary_rop_gadgets` for ROP chains
+- `binary_pattern_offset` to find buffer overflow offsets
+- `binary_pwntools_template` to generate exploit scripts
+- `binary_shellcode_generate` for shellcode payloads
 
-**Reverse engineering challenges:**
+**Reverse engineering challenges:** (solve.py has subprocess/struct imports — add decoder/keygen logic)
 - `r2_functions` to get an overview of all functions
 - `r2_decompile` for pseudocode of key functions
 - `r2_xrefs` to trace call graphs (who calls what)
@@ -202,18 +217,28 @@ For parallel execution, launch multiple subagents in a single message using the 
 - `r2_diff` to compare patched vs original binaries
 - `gdb_break_inspect` to validate static analysis with runtime state
 
-**Forensics/Stego challenges:**
-- `file_triage` first — get file type, metadata, embedded data, entropy
-- `stego_analyze` systematically tries all stego tools for the file type
-- `extract_embedded` for binwalk/foremost extraction
-- `entropy_analysis` to find encrypted/compressed regions
-- `image_analysis` for deep image inspection (LSB, channels, histograms)
+**Forensics/Stego challenges:** (solve.py is minimal — most work uses MCP tools, add extraction logic if needed)
+- `forensics_file_triage` first — get file type, metadata, embedded data, entropy
+- `forensics_stego_analyze` systematically tries all stego tools for the file type
+- `forensics_extract_embedded` for binwalk/foremost extraction
+- `forensics_entropy_analysis` to find encrypted/compressed regions
+- `forensics_image_analysis` for deep image inspection (LSB, channels, histograms)
 
-**Web challenges:**
+**Web challenges:** (solve.py has a requests session template — build your exploit there)
 - Use bash directly: curl, sqlmap, ffuf, nuclei, nikto, etc.
 - These tools work well from bash and don't need MCP wrapping
 
-### 7. Progress Tracking & Flag Submission
+### 7. Incremental Work & Retries
+
+Subagents should treat `solve.py` as a living document:
+- **Read it first** — it may contain prior work from failed attempts
+- **Edit incrementally** — don't rewrite from scratch
+- **Keep it runnable** — the script should reproduce the solve end-to-end
+- **Even failed attempts** should leave useful code in solve.py for the next try
+- **MCP tools are for analysis**; solve.py is for the actual solution logic
+- **Submit first, polish after** — don't hold a flag waiting for clean code
+
+### 8. Progress Tracking & Flag Submission
 
 - **Auto-submit immediately** — the moment any tool output, decoded string, solver result,
   or extracted data contains a flag-like pattern, call `ctf_submit_flag` right away. Do NOT
@@ -232,7 +257,7 @@ For parallel execution, launch multiple subagents in a single message using the 
 - **Notifications** — `ctf_notifications()` fetches platform announcements which may
   contain hints, errata, or flag format changes
 
-### 8. Post-Solve Documentation
+### 9. Post-Solve Documentation
 
 After every successful flag submission, subagents MUST call `ctf_save_writeup` to document the solution:
 
@@ -252,7 +277,7 @@ Methodology should include:
 
 This generates a `writeup.md` in the challenge directory alongside `solve.py` and `notes.md`.
 
-### 9. TUI Dashboard
+### 10. TUI Dashboard
 
 Run `ctf dashboard` in a separate terminal to monitor progress in real-time while the
 orchestrator works. The dashboard polls `.ctf-state.json` every 2 seconds and shows:

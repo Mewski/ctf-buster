@@ -204,10 +204,18 @@ impl McpServer {
 
       let detailed: Vec<_> = stream::iter(ids.into_iter().map(move |id| {
         let platform = platform.clone();
-        async move { platform.challenge(&id).await }
+        async move { (id.clone(), platform.challenge(&id).await) }
       }))
       .buffer_unordered(5) // Limit concurrent API requests
-      .filter_map(|r| async { r.ok() })
+      .filter_map(|(id, r)| async move {
+        match r {
+          Ok(c) => Some(c),
+          Err(e) => {
+            tracing::warn!("Failed to fetch details for challenge {id}: {e}");
+            None
+          }
+        }
+      })
       .collect()
       .await;
 
@@ -729,23 +737,39 @@ impl McpServer {
         })
         .unwrap_or_default();
 
-      // Determine recommended model
+      // Determine recommended model based on category, difficulty, and retry status
       let cat_lower = target.category.to_lowercase();
       let is_retry = orch.failed.iter().any(|f| f.name.to_lowercase() == target.name.to_lowercase());
+
       let recommended_model = if is_retry || target.points > 300 {
+        // Retries and hard challenges need deep reasoning
         "opus"
+      } else if matches!(cat_lower.as_str(),
+        "crypto" | "cryptography" | "pwn" | "binary exploitation" | "exploitation" | "pwnable"
+      ) {
+        // Crypto (math reasoning) and pwn (exploit chains) benefit from opus
+        if target.priority >= 25 {
+          // Easy crypto/pwn (high priority = high solves) can use sonnet
+          "sonnet"
+        } else {
+          "opus"
+        }
+      } else if target.priority >= 30 {
+        // Very easy challenges (high solves + good category) — haiku is sufficient
+        "haiku"
       } else {
+        // Default: sonnet for web, forensics, rev, misc first attempts
         "sonnet"
       };
 
       // Category-specific tool suggestions
       let tool_hints = match cat_lower.as_str() {
-        "crypto" | "cryptography" => "Use crypto_identify, transform_chain, rsa_toolkit, math_solve. Start with crypto_identify to detect encoding/cipher type.",
-        "forensics" | "forensic" => "Use file_triage, stego_analyze, extract_embedded, entropy_analysis. Start with file_triage.",
+        "crypto" | "cryptography" => "Use crypto_identify, crypto_transform_chain, crypto_rsa_toolkit, crypto_math_solve. Start with crypto_identify to detect encoding/cipher type.",
+        "forensics" | "forensic" => "Use forensics_file_triage, forensics_stego_analyze, forensics_extract_embedded, forensics_entropy_analysis. Start with forensics_file_triage.",
         "web" | "web exploitation" => "Use curl, sqlmap, ffuf from bash. Check source code, headers, cookies, robots.txt.",
         "rev" | "reverse" | "reverse engineering" | "reversing" => "Use r2_functions, r2_decompile, r2_xrefs, r2_strings_xrefs. Start with r2_functions for an overview, then decompile key functions.",
-        "pwn" | "binary exploitation" | "exploitation" | "pwnable" => "Use binary_triage first, then gdb_break_inspect, gdb_trace_input, angr_analyze. Check for buffer overflows, format strings, use-after-free.",
-        _ => "Use file_triage on any downloaded files, then choose tools based on content type.",
+        "pwn" | "binary exploitation" | "exploitation" | "pwnable" => "Use binary_triage first, then gdb_break_inspect, gdb_trace_input, binary_angr_analyze. Check for buffer overflows, format strings, use-after-free.",
+        _ => "Use forensics_file_triage on any downloaded files, then choose tools based on content type.",
       };
 
       let files_str = if files.is_empty() {
@@ -760,32 +784,70 @@ impl McpServer {
         format!("\n   Hints: {}", hints.join("; "))
       };
 
+      // Compute the challenge directory path
+      let cat_dir = scaffold::sanitize_filename(&target.category.to_lowercase());
+      let name_dir = scaffold::sanitize_filename(&target.name.to_lowercase()
+        .chars()
+        .map(|c| if c == ' ' { '-' } else { c })
+        .collect::<String>());
+      let challenge_dir = format!("{}/{}/{}", self.workspace_root.display(), cat_dir, name_dir);
+
+      let retry_section = if is_retry {
+        format!(
+          "\nRETRY: This challenge was attempted before and failed. Check:\n\
+           - {challenge_dir}/solve.py — may contain partial work from previous attempt\n\
+           - {challenge_dir}/notes.md — may have observations\n\
+           Build on existing work rather than starting over.\n"
+        )
+      } else {
+        String::new()
+      };
+
       let prompt = format!(
         "Solve CTF challenge '{name}' (category: {cat}, {pts} pts).\n\
          Description: {desc}\n\
          Files: {files}{hints}\n\
          Workspace: {workspace_root}\n\
+         Challenge directory: {challenge_dir}\n\
+         Downloaded files will be in: {challenge_dir}/dist/\n\
+         {retry}\
          \n\
          Tool suggestions: {tool_hints}\n\
          \n\
          Steps:\n\
          1. Download files with ctf_download_files('{name}')\n\
-         2. Triage with the appropriate tool for {cat} challenges\n\
-         3. Analyze and solve using the MCP tools available\n\
-         4. AUTO-SUBMIT: As soon as you find ANYTHING matching a flag format \
+         2. Check {challenge_dir}/dist/ for downloaded files\n\
+         3. Read {challenge_dir}/solve.py — it has a category-appropriate template \
+            (or prior work from a failed attempt). Build on what's there.\n\
+         4. Triage with the appropriate tool for {cat} challenges\n\
+         5. As you work, EDIT solve.py incrementally:\n\
+            - Add imports you need\n\
+            - Add working code as you discover the solution\n\
+            - Keep the script runnable — it should reproduce the solve\n\
+            - Don't rewrite from scratch; append/edit sections\n\
+         6. For quick analysis, MCP tools are fine (crypto_identify, forensics_file_triage, etc.)\n\
+            But any multi-step decode pipeline, exploit, or solution logic should go into solve.py.\n\
+         7. AUTO-SUBMIT: As soon as you find ANYTHING matching a flag format \
             (e.g. flag{{...}}, CTF{{...}}), immediately call \
             ctf_submit_flag('{name}', '<the_flag>') — do NOT wait or ask.\n\
-         5. If correct, report solved. If incorrect, continue analysis.\n\
-         6. After a correct flag, call ctf_save_writeup('{name}', \
+         8. If correct, continue to step 9. If incorrect, continue analysis.\n\
+         9. After a correct flag, call ctf_save_writeup('{name}', \
             methodology='<how you solved it>', tools_used=['<tools>'])\n\
-         7. Report back: solved/unsolved/needs-help",
+         10. Mark complete: ctf_queue_update(action='complete', challenge='{name}')\n\
+         11. Report back: solved/unsolved/needs-help\n\
+         \n\
+         If you cannot solve it after thorough analysis, call \
+         ctf_queue_update(action='fail', challenge='{name}', notes='<what you tried>') \
+         and report needs-help.",
         name = target.name,
         cat = target.category,
         pts = target.points,
         desc = description,
         files = files_str,
         hints = hints_str,
+        retry = retry_section,
         workspace_root = self.workspace_root.display(),
+        challenge_dir = challenge_dir,
         tool_hints = tool_hints,
       );
 
@@ -883,17 +945,28 @@ impl ServerHandler for McpServer {
   fn get_info(&self) -> ServerInfo {
     ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
       .with_instructions(
-        "CTF competition assistant. Use these tools to interact with a CTF platform: \
-         list challenges, read descriptions and hints for context, submit flags, \
-         track progress, and download challenge files. Start with ctf_workspace_status \
-         to understand the current state, then use ctf_challenges to browse. \
-         Use ctf_sync with full=true to cache all challenge descriptions for context. \
-         IMPORTANT: Always auto-submit flags immediately when found — call \
-         ctf_submit_flag as soon as you find any flag-like string (e.g. flag{...}, \
-         CTF{...}). Do not wait or ask for confirmation. The tool returns whether \
-         the flag was correct, so there is no risk in submitting. \
-         After a correct submission, call ctf_save_writeup to document how \
-         you solved the challenge."
+        "CTF competition assistant with two modes of operation:\n\n\
+         \
+         ORCHESTRATOR MODE (main agent coordinating a CTF):\n\
+         1. ctf_sync(full=true) — fetch all challenges, descriptions, files, unlock free hints\n\
+         2. ctf_auto_queue() — auto-score and prioritize all unsolved challenges\n\
+         3. ctf_generate_solve_prompt(count=N) — get ready-to-use subagent prompts (auto-marks as in_progress)\n\
+         4. Launch subagents via Task tool using the returned prompts and recommended models\n\
+         5. After subagents complete: check ctf_challenges(unsolved=true) for remaining work\n\
+         6. For failures: ctf_queue_update(action='fail', challenge='...', notes='...')\n\
+         7. To prioritize a specific challenge: ctf_queue_update(action='prioritize', challenge='...')\n\
+         8. Loop back to step 1\n\n\
+         \
+         SOLVER MODE (subagent solving a specific challenge):\n\
+         - Download files with ctf_download_files, triage with category tools, analyze and solve\n\
+         - AUTO-SUBMIT flags immediately: call ctf_submit_flag as soon as you find any flag-like \
+         string (flag{...}, CTF{...}). Do not wait or ask. The tool returns correct/incorrect.\n\
+         - After correct submission: call ctf_save_writeup to document methodology\n\
+         - After solving or giving up: call ctf_queue_update(action='complete'|'fail', challenge='...')\n\n\
+         \
+         Key tools: ctf_workspace_status (overview), ctf_challenges (browse), \
+         ctf_sync (fetch from platform), ctf_auto_queue (score/prioritize), \
+         ctf_generate_solve_prompt (create subagent prompts), ctf_queue_update (manage queue state)"
           .to_string(),
       )
   }

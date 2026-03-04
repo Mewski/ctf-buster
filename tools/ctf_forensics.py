@@ -16,9 +16,9 @@ mcp = FastMCP(
     "ctf-forensics",
     instructions=(
         "File forensics and steganography tools for CTF challenges. "
-        "Start with file_triage for a comprehensive overview, then use "
-        "stego_analyze for steganography, extract_embedded for data carving, "
-        "or image_analysis for deep image inspection."
+        "Start with forensics_file_triage for a comprehensive overview, then use "
+        "forensics_stego_analyze for steganography, forensics_extract_embedded for data carving, "
+        "or forensics_image_analysis for deep image inspection."
     ),
 )
 
@@ -27,7 +27,7 @@ mcp = FastMCP(
 
 
 @mcp.tool()
-def file_triage(path: str) -> str:
+def forensics_file_triage(path: str) -> str:
     """Comprehensive one-shot file analysis — runs file, exiftool, binwalk, strings.
 
     Returns file type, metadata, embedded data signatures, interesting strings,
@@ -179,7 +179,7 @@ def _check_trailing_data(path, mime_type):
 
 
 @mcp.tool()
-def stego_analyze(path: str, password: str = "") -> str:
+def forensics_stego_analyze(path: str, password: str = "") -> str:
     """Systematic steganography analysis — tries ALL applicable tools for the file type.
 
     Args:
@@ -445,7 +445,7 @@ def _try_steghide(path, password):
 
 
 @mcp.tool()
-def extract_embedded(path: str) -> str:
+def forensics_extract_embedded(path: str) -> str:
     """Extract embedded files from a binary/image using binwalk and foremost.
 
     Returns a list of extracted files with their types and paths.
@@ -546,7 +546,7 @@ def _entropy_interpretation(entropy):
 
 
 @mcp.tool()
-def entropy_analysis(path: str, block_size: int = 4096) -> str:
+def forensics_entropy_analysis(path: str, block_size: int = 4096) -> str:
     """Calculate block-level entropy to detect encrypted/compressed regions.
 
     Args:
@@ -614,7 +614,7 @@ def entropy_analysis(path: str, block_size: int = 4096) -> str:
 
 
 @mcp.tool()
-def image_analysis(path: str, extract_lsb: bool = False) -> str:
+def forensics_image_analysis(path: str, extract_lsb: bool = False) -> str:
     """Deep image analysis — channel separation, LSB extraction, palette, histogram anomalies.
 
     Args:

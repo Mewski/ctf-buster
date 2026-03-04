@@ -115,15 +115,24 @@ pub async fn handle_sync(workspace_root: &Path, full: bool) -> Result<()> {
     let detailed: Vec<_> = stream::iter(challenges.iter().map(|c| {
       let platform = plat.as_ref();
       let id = c.id.clone();
+      let name = c.name.clone();
       let pb = pb.clone();
       async move {
         let result = platform.challenge(&id).await;
         pb.inc(1);
-        result
+        (name, result)
       }
     }))
     .buffer_unordered(5)
-    .filter_map(|r| async { r.ok() })
+    .filter_map(|(name, r)| async move {
+      match r {
+        Ok(c) => Some(c),
+        Err(e) => {
+          eprintln!("  Warning: failed to fetch details for {name}: {e}");
+          None
+        }
+      }
+    })
     .collect()
     .await;
 

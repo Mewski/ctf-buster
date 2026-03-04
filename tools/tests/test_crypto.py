@@ -17,10 +17,10 @@ _apply_op = ctf_crypto._apply_op
 
 # Decorated @mcp.tool functions become FunctionTool objects;
 # access the underlying function via .fn
-transform_chain = ctf_crypto.transform_chain.fn
+transform_chain = ctf_crypto.crypto_transform_chain.fn
 crypto_identify = ctf_crypto.crypto_identify.fn
-frequency_analysis = ctf_crypto.frequency_analysis.fn
-hash_crack = ctf_crypto.hash_crack.fn
+frequency_analysis = ctf_crypto.crypto_frequency_analysis.fn
+hash_crack = ctf_crypto.crypto_hash_crack.fn
 
 # ── _apply_op tests ──────────────────────────────────────────────────────────
 

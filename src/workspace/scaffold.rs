@@ -86,6 +86,18 @@ fn sanitize_name(name: &str) -> String {
 }
 
 fn generate_solve_template(challenge: &Challenge) -> String {
+  let cat = challenge.category.to_lowercase();
+  match cat.as_str() {
+    "pwn" | "binary exploitation" | "exploitation" | "pwnable" => pwn_template(challenge),
+    "crypto" | "cryptography" => crypto_template(challenge),
+    "rev" | "reverse" | "reverse engineering" | "reversing" => rev_template(challenge),
+    "web" | "web exploitation" => web_template(challenge),
+    "forensics" | "forensic" | "stego" | "steganography" => forensics_template(challenge),
+    _ => generic_template(challenge),
+  }
+}
+
+fn pwn_template(challenge: &Challenge) -> String {
   format!(
     r#"#!/usr/bin/env python3
 """
@@ -94,7 +106,122 @@ fn generate_solve_template(challenge: &Challenge) -> String {
 
 from pwn import *
 
+# context.log_level = "debug"
+context.arch = "amd64"
+
+BINARY = "./dist/<binary>"  # TODO: set binary path
+# REMOTE = ("host", port)  # TODO: set remote target
+
+elf = ELF(BINARY)
+# libc = ELF("./dist/libc.so.6")
+
+def exploit(io):
+    # TODO: build exploit
+    pass
+
+if __name__ == "__main__":
+    if args.REMOTE:
+        io = remote(*REMOTE)
+    else:
+        io = process(BINARY)
+    exploit(io)
+    io.interactive()
+"#,
+    name = challenge.name,
+    category = challenge.category,
+    value = challenge.value,
+  )
+}
+
+fn crypto_template(challenge: &Challenge) -> String {
+  format!(
+    r#"#!/usr/bin/env python3
+"""
+{name} ({category}, {value} pts)
+"""
+
+import json
+import sys
+
+# Use crypto_* MCP tools for analysis, write solution below
 # challenge files in ./dist/
+
+"#,
+    name = challenge.name,
+    category = challenge.category,
+    value = challenge.value,
+  )
+}
+
+fn rev_template(challenge: &Challenge) -> String {
+  format!(
+    r#"#!/usr/bin/env python3
+"""
+{name} ({category}, {value} pts)
+"""
+
+import struct
+import subprocess
+
+# Use r2_* MCP tools for static analysis, write decoder/keygen below
+# challenge files in ./dist/
+
+"#,
+    name = challenge.name,
+    category = challenge.category,
+    value = challenge.value,
+  )
+}
+
+fn web_template(challenge: &Challenge) -> String {
+  format!(
+    r#"#!/usr/bin/env python3
+"""
+{name} ({category}, {value} pts)
+"""
+
+import requests
+
+BASE_URL = ""  # TODO: set target URL
+s = requests.Session()
+
+# TODO: build exploit
+
+"#,
+    name = challenge.name,
+    category = challenge.category,
+    value = challenge.value,
+  )
+}
+
+fn forensics_template(challenge: &Challenge) -> String {
+  format!(
+    r#"#!/usr/bin/env python3
+"""
+{name} ({category}, {value} pts)
+"""
+
+import os
+
+# Use forensics_* MCP tools for analysis, add extraction/decode logic below
+# challenge files in ./dist/
+
+"#,
+    name = challenge.name,
+    category = challenge.category,
+    value = challenge.value,
+  )
+}
+
+fn generic_template(challenge: &Challenge) -> String {
+  format!(
+    r#"#!/usr/bin/env python3
+"""
+{name} ({category}, {value} pts)
+"""
+
+# challenge files in ./dist/
+
 "#,
     name = challenge.name,
     category = challenge.category,
@@ -282,6 +409,74 @@ mod tests {
     assert!(content.contains("My Challenge"));
     assert!(content.contains("Crypto"));
     assert!(content.contains("100 pts"));
+  }
+
+  #[test]
+  fn solve_template_pwn_has_pwntools() {
+    let c = make_challenge("Buffer Overflow", "pwn");
+    let content = generate_solve_template(&c);
+    assert!(content.contains("from pwn import *"));
+    assert!(content.contains("ELF(BINARY)"));
+    assert!(content.contains("exploit(io)"));
+    assert!(content.contains("io.interactive()"));
+  }
+
+  #[test]
+  fn solve_template_crypto_no_pwntools() {
+    let c = make_challenge("Easy RSA", "Crypto");
+    let content = generate_solve_template(&c);
+    assert!(!content.contains("from pwn import"));
+    assert!(content.contains("import json"));
+    assert!(content.contains("crypto_*"));
+  }
+
+  #[test]
+  fn solve_template_web_has_requests() {
+    let c = make_challenge("SQLi", "Web");
+    let content = generate_solve_template(&c);
+    assert!(!content.contains("from pwn import"));
+    assert!(content.contains("import requests"));
+    assert!(content.contains("BASE_URL"));
+  }
+
+  #[test]
+  fn solve_template_rev_has_struct() {
+    let c = make_challenge("Crackme", "Rev");
+    let content = generate_solve_template(&c);
+    assert!(!content.contains("from pwn import"));
+    assert!(content.contains("import struct"));
+    assert!(content.contains("r2_*"));
+  }
+
+  #[test]
+  fn solve_template_forensics_minimal() {
+    let c = make_challenge("Hidden Data", "Forensics");
+    let content = generate_solve_template(&c);
+    assert!(!content.contains("from pwn import"));
+    assert!(content.contains("forensics_*"));
+  }
+
+  #[test]
+  fn solve_template_misc_generic() {
+    let c = make_challenge("Misc Fun", "Misc");
+    let content = generate_solve_template(&c);
+    assert!(!content.contains("from pwn import"));
+    assert!(!content.contains("import requests"));
+    assert!(content.contains("challenge files in ./dist/"));
+  }
+
+  #[test]
+  fn solve_template_binary_exploitation_is_pwn() {
+    let c = make_challenge("Exploit Me", "Binary Exploitation");
+    let content = generate_solve_template(&c);
+    assert!(content.contains("from pwn import *"));
+  }
+
+  #[test]
+  fn solve_template_stego_is_forensics() {
+    let c = make_challenge("Hidden Bits", "Stego");
+    let content = generate_solve_template(&c);
+    assert!(content.contains("forensics_*"));
   }
 
   #[test]

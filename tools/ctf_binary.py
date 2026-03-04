@@ -16,7 +16,7 @@ mcp = FastMCP(
     instructions=(
         "Binary analysis and exploit development tools for CTF challenges. "
         "Start with binary_triage for a comprehensive overview, then use "
-        "disassemble, find_rop_gadgets, or pwntools_template as needed."
+        "binary_disassemble, binary_rop_gadgets, or binary_pwntools_template as needed."
     ),
 )
 
@@ -136,7 +136,7 @@ def binary_triage(path: str) -> str:
 
 
 @mcp.tool()
-def disassemble(path: str, function: str = "main", count: int = 50) -> str:
+def binary_disassemble(path: str, function: str = "main", count: int = 50) -> str:
     """Disassemble a function or address range from a binary using radare2.
 
     Args:
@@ -175,7 +175,7 @@ def disassemble(path: str, function: str = "main", count: int = 50) -> str:
 
 
 @mcp.tool()
-def find_rop_gadgets(
+def binary_rop_gadgets(
     path: str, search: str = "", max_depth: int = 5, max_results: int = 50
 ) -> str:
     """Search for ROP gadgets in a binary using ROPgadget.
@@ -218,7 +218,9 @@ def find_rop_gadgets(
 
 
 @mcp.tool()
-def pattern_offset(action: str = "create", length: int = 200, value: str = "") -> str:
+def binary_pattern_offset(
+    action: str = "create", length: int = 200, value: str = ""
+) -> str:
     """Generate cyclic patterns or find offset from a crash value using pwntools.
 
     Args:
@@ -259,7 +261,7 @@ def pattern_offset(action: str = "create", length: int = 200, value: str = "") -
 
 
 @mcp.tool()
-def shellcode_generate(
+def binary_shellcode_generate(
     arch: str = "amd64",
     os_name: str = "linux",
     payload: str = "sh",
@@ -314,7 +316,7 @@ def shellcode_generate(
 
 
 @mcp.tool()
-def pwntools_template(
+def binary_pwntools_template(
     path: str,
     remote: str = "",
     technique: str = "ret2win",
@@ -501,7 +503,7 @@ def pwntools_template(
 
 
 @mcp.tool()
-def angr_analyze(
+def binary_angr_analyze(
     path: str,
     mode: str = "auto",
     target_addr: str = "",

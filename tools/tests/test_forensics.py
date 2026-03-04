@@ -19,11 +19,11 @@ from ctf_forensics import (
     _entropy_interpretation,
 )
 
-file_triage = ctf_forensics.file_triage.fn
-stego_analyze = ctf_forensics.stego_analyze.fn
-extract_embedded = ctf_forensics.extract_embedded.fn
-entropy_analysis = ctf_forensics.entropy_analysis.fn
-image_analysis = ctf_forensics.image_analysis.fn
+file_triage = ctf_forensics.forensics_file_triage.fn
+stego_analyze = ctf_forensics.forensics_stego_analyze.fn
+extract_embedded = ctf_forensics.forensics_extract_embedded.fn
+entropy_analysis = ctf_forensics.forensics_entropy_analysis.fn
+image_analysis = ctf_forensics.forensics_image_analysis.fn
 
 # ── _calculate_entropy tests ─────────────────────────────────────────────────
 

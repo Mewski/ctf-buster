@@ -15,12 +15,12 @@ import ctf_binary
 # Access the underlying functions from FastMCP tool wrappers
 binary_triage = ctf_binary.binary_triage.fn
 _binary_triage_impl = ctf_binary._binary_triage_impl
-disassemble = ctf_binary.disassemble.fn
-find_rop_gadgets = ctf_binary.find_rop_gadgets.fn
-pattern_offset = ctf_binary.pattern_offset.fn
-shellcode_generate = ctf_binary.shellcode_generate.fn
-pwntools_template = ctf_binary.pwntools_template.fn
-angr_analyze = ctf_binary.angr_analyze.fn
+disassemble = ctf_binary.binary_disassemble.fn
+find_rop_gadgets = ctf_binary.binary_rop_gadgets.fn
+pattern_offset = ctf_binary.binary_pattern_offset.fn
+shellcode_generate = ctf_binary.binary_shellcode_generate.fn
+pwntools_template = ctf_binary.binary_pwntools_template.fn
+angr_analyze = ctf_binary.binary_angr_analyze.fn
 
 
 # ── DANGEROUS_FUNCS constant ─────────────────────────────────────────────────

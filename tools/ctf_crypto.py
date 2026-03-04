@@ -16,8 +16,8 @@ mcp = FastMCP(
     "ctf-crypto",
     instructions=(
         "Cryptographic analysis and encoding tools for CTF challenges. "
-        "Use transform_chain for encoding/decoding pipelines, crypto_identify to detect "
-        "encoding types, rsa_toolkit for RSA attacks, math_solve for constraint solving."
+        "Use crypto_transform_chain for encoding/decoding pipelines, crypto_identify to detect "
+        "encoding types, crypto_rsa_toolkit for RSA attacks, crypto_math_solve for constraint solving."
     ),
 )
 
@@ -124,7 +124,7 @@ def _apply_op(data: str, op: str) -> str:
 
 
 @mcp.tool()
-def transform_chain(data: str, operations: list[str]) -> str:
+def crypto_transform_chain(data: str, operations: list[str]) -> str:
     """Apply a chain of encoding/decoding operations to data, returning intermediate results.
 
     Supported operations:
@@ -287,7 +287,7 @@ def crypto_identify(data: str) -> str:
 
 
 @mcp.tool()
-def rsa_toolkit(
+def crypto_rsa_toolkit(
     n: str,
     e: int = 65537,
     c: str = "",
@@ -474,7 +474,7 @@ def rsa_toolkit(
 
 
 @mcp.tool()
-def math_solve(mode: str, expression: str, variables: str = "") -> str:
+def crypto_math_solve(mode: str, expression: str, variables: str = "") -> str:
     """Evaluate math expressions or solve constraints.
 
     Args:
@@ -548,7 +548,7 @@ def math_solve(mode: str, expression: str, variables: str = "") -> str:
 
 
 @mcp.tool()
-def hash_crack(hash_value: str, wordlist: str = "") -> str:
+def crypto_hash_crack(hash_value: str, wordlist: str = "") -> str:
     """Identify a hash type and attempt lightweight dictionary cracking.
 
     Args:
@@ -630,7 +630,7 @@ def hash_crack(hash_value: str, wordlist: str = "") -> str:
 
 
 @mcp.tool()
-def frequency_analysis(text: str) -> str:
+def crypto_frequency_analysis(text: str) -> str:
     """Perform frequency analysis on text for classical cipher analysis.
 
     Returns character frequencies, bigram frequencies, and chi-squared English score.
