@@ -63,7 +63,24 @@ impl McpServer {
 
     challenges.sort_by(|a, b| a.category.cmp(&b.category).then(a.name.cmp(&b.name)));
 
-    let json = serde_json::to_string_pretty(&challenges).map_err(to_mcp_error)?;
+    // Return slim listing to avoid bloating orchestrator context with descriptions/hints/URLs
+    let slim: Vec<_> = challenges
+      .iter()
+      .map(|c| {
+        serde_json::json!({
+          "id": c.id,
+          "name": c.name,
+          "category": c.category,
+          "value": c.value,
+          "solves": c.solves,
+          "solved_by_me": c.solved_by_me,
+          "files": c.files.len(),
+          "hints": c.hints.len(),
+          "tags": c.tags,
+        })
+      })
+      .collect();
+    let json = serde_json::to_string_pretty(&slim).map_err(to_mcp_error)?;
     Ok(CallToolResult::success(vec![Content::text(json)]))
   }
 
@@ -547,17 +564,33 @@ impl McpServer {
     orch.updated_at = Some(chrono::Utc::now());
     state::update_orchestration(&self.workspace_root, orch).map_err(to_mcp_error)?;
 
-    // Return the queue as JSON
+    // Return compact summary (full state available via ctf_queue_status)
     let updated = state::load_orchestration(&self.workspace_root).map_err(to_mcp_error)?;
-    let json = serde_json::to_string_pretty(&updated).map_err(to_mcp_error)?;
+    let top_entries: Vec<String> = updated
+      .queue
+      .iter()
+      .take(15)
+      .map(|q| format!("  {} [{}] p={} {}pts", q.name, q.category, q.priority, q.points))
+      .collect();
 
-    Ok(CallToolResult::success(vec![Content::text(format!(
-      "Auto-queued {queue_len} unsolved challenges by priority.\n\n{json}"
-    ))]))
+    let mut summary = format!(
+      "Auto-queued {} challenges. In-progress: {}. Failed: {}.",
+      queue_len,
+      updated.in_progress.len(),
+      updated.failed.len()
+    );
+    if !top_entries.is_empty() {
+      summary.push_str(&format!("\n\nTop of queue:\n{}", top_entries.join("\n")));
+    }
+    if queue_len > 15 {
+      summary.push_str(&format!("\n  ...and {} more", queue_len - 15));
+    }
+
+    Ok(CallToolResult::success(vec![Content::text(summary)]))
   }
 
   #[tool(
-    description = "Generate ready-to-use subagent prompts for solving challenges. Takes from the top of the queue (or a specific challenge). Returns structured JSON with: challenge info, recommended model, full prompt text, and tool suggestions. Use this to launch subagents via the Task tool."
+    description = "Generate ready-to-use subagent prompts for solving challenges. Takes from the top of the queue (or a specific challenge). Returns structured JSON with: challenge info, recommended model, prompt_file path, and tool suggestions. Read each prompt_file and pass its content to the Task tool to launch subagents."
   )]
   async fn ctf_generate_solve_prompt(
     &self,
@@ -766,6 +799,11 @@ Use forensics_file_triage on any downloaded files to determine content type, the
         tool_hints = tool_hints,
       );
 
+      // Write prompt to file to avoid bloating orchestrator context
+      let prompt_path = format!("{challenge_dir}/.solve-prompt.txt");
+      std::fs::create_dir_all(&challenge_dir).map_err(to_mcp_error)?;
+      std::fs::write(&prompt_path, &prompt).map_err(to_mcp_error)?;
+
       prompts.push(serde_json::json!({
         "challenge": target.name,
         "category": target.category,
@@ -774,14 +812,14 @@ Use forensics_file_triage on any downloaded files to determine content type, the
         "recommended_model": recommended_model,
         "subagent_type": "general-purpose",
         "is_retry": is_retry,
-        "prompt": prompt,
+        "prompt_file": prompt_path,
       }));
     }
 
     let result = serde_json::json!({
       "count": prompts.len(),
       "prompts": prompts,
-      "usage": "For each prompt, launch a subagent: Task(description='Solve <name>', prompt=prompt, model=recommended_model, subagent_type='general-purpose'). Launch multiple in parallel for maximum throughput.",
+      "usage": "For each prompt: read the prompt_file content, then launch a subagent: Task(description='Solve <name>', prompt=<content of prompt_file>, model=recommended_model, subagent_type='general-purpose'). Launch multiple in parallel for maximum throughput.",
     });
 
     let json = serde_json::to_string_pretty(&result).map_err(to_mcp_error)?;
@@ -847,8 +885,8 @@ impl ServerHandler for McpServer {
          ORCHESTRATOR MODE (main agent coordinating a CTF):\n\
          1. ctf_sync(full=true) — fetch all challenges, descriptions, files, unlock free hints\n\
          2. ctf_auto_queue() — auto-score and prioritize all unsolved challenges\n\
-         3. ctf_generate_solve_prompt(count=N) — get ready-to-use subagent prompts (auto-marks as in_progress)\n\
-         4. Launch subagents via Task tool using the returned prompts and recommended models\n\
+         3. ctf_generate_solve_prompt(count=N) — get prompt_file paths + metadata (auto-marks as in_progress)\n\
+         4. Read each prompt_file, launch subagents via Task tool with the content + recommended models\n\
          5. After subagents complete: check ctf_challenges(unsolved=true) for remaining work\n\
          6. For failures: ctf_queue_update(action='fail', challenge='...', notes='...')\n\
          7. To prioritize a specific challenge: ctf_queue_update(action='prioritize', challenge='...')\n\

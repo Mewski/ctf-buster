@@ -75,12 +75,13 @@ while unsolved challenges remain:
   1. ctf_sync(full=true)                   # Fetch challenges + descriptions + files
   2. ctf_auto_queue()                      # Auto-score and queue all unsolved
   3. ctf_generate_solve_prompt(count=10)   # Get prompts for top 10
-     — returns JSON with: prompt, recommended_model, subagent_type per challenge
+     — returns JSON with: prompt_file path, recommended_model, subagent_type per challenge
+     — prompts are written to files to keep orchestrator context small
      — auto-marks selected challenges as in_progress
-  4. Launch subagents via Task tool — one per challenge, ALL in parallel:
+  4. For each prompt: Read the prompt_file, then launch a subagent:
      Task(
        description="Solve <challenge_name>",
-       prompt=<prompt from step 3>,
+       prompt=<content read from prompt_file>,
        model=<recommended_model from step 3>,  // "opus", "sonnet", or "haiku"
        subagent_type="general-purpose",
        run_in_background=true                   // Non-blocking!
@@ -152,19 +153,20 @@ for each challenge. Just pass it to the Task tool's `model` parameter.
 
 ### 5. Subagent Structure
 
-**Automated:** Call `ctf_generate_solve_prompt(count=N)` to get ready-to-use prompts.
-Each prompt includes challenge info, tool suggestions, model recommendation, and the
-full step sequence. Just pass them directly to the Task tool.
+**Automated:** Call `ctf_generate_solve_prompt(count=N)` to get prompt file paths.
+Each prompt file contains challenge info, tool suggestions, model recommendation, and the
+full step sequence. Read each file and pass the content to the Task tool.
 
 ```
 # Generate prompts for top 3 challenges
 result = ctf_generate_solve_prompt(count=3)
 
-# Launch each as a subagent
+# Launch each as a subagent — read prompt_file content first
 for prompt_data in result.prompts:
+  prompt_content = Read(prompt_data.prompt_file)
   Task(
     description="Solve " + prompt_data.challenge,
-    prompt=prompt_data.prompt,
+    prompt=prompt_content,
     model=prompt_data.recommended_model,
     subagent_type="general-purpose"
   )
