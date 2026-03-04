@@ -201,6 +201,10 @@ pub async fn handle_status(workspace_name: &str, platform_url: &str) -> Result<(
 #[cfg(test)]
 mod tests {
   use super::*;
+  use std::sync::Mutex;
+
+  /// Tests that modify CTF_TOKEN must hold this lock to avoid racing each other.
+  static ENV_LOCK: Mutex<()> = Mutex::new(());
 
   #[test]
   fn expand_env_vars_no_vars() {
@@ -263,31 +267,35 @@ mod tests {
 
   #[test]
   fn get_token_with_config_cli_takes_priority() {
+    let _lock = ENV_LOCK.lock().unwrap();
     std::env::set_var("CTF_TOKEN", "env_token");
     let result = get_token_with_config("test", Some("config_token"), Some("cli_token"));
-    assert_eq!(result.unwrap(), "cli_token");
     std::env::remove_var("CTF_TOKEN");
+    assert_eq!(result.unwrap(), "cli_token");
   }
 
   #[test]
   fn get_token_with_config_env_over_config() {
+    let _lock = ENV_LOCK.lock().unwrap();
     std::env::set_var("CTF_TOKEN", "env_token");
     let result = get_token_with_config("test", Some("config_token"), None);
-    assert_eq!(result.unwrap(), "env_token");
     std::env::remove_var("CTF_TOKEN");
+    assert_eq!(result.unwrap(), "env_token");
   }
 
   #[test]
   fn get_token_with_config_config_token_expanded() {
+    let _lock = ENV_LOCK.lock().unwrap();
     std::env::remove_var("CTF_TOKEN");
     std::env::set_var("CTF_MY_SECRET_XYZ", "expanded_secret");
     let result = get_token_with_config("test", Some("${CTF_MY_SECRET_XYZ}"), None);
-    assert_eq!(result.unwrap(), "expanded_secret");
     std::env::remove_var("CTF_MY_SECRET_XYZ");
+    assert_eq!(result.unwrap(), "expanded_secret");
   }
 
   #[test]
   fn get_token_with_config_literal_config_token() {
+    let _lock = ENV_LOCK.lock().unwrap();
     std::env::remove_var("CTF_TOKEN");
     let result = get_token_with_config("test", Some("literal_token_value"), None);
     assert_eq!(result.unwrap(), "literal_token_value");
