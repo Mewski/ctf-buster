@@ -55,7 +55,7 @@
               gmpy2
               pycryptodome
 
-              # Used by ctf_binary MCP server
+              # Used by ctf_pwn MCP server
               angr
               pwntools
               capstone
@@ -81,7 +81,7 @@
 
           # CLI tools used by MCP servers via subprocess + essential CTF tools
           ctfTools = with pkgs; [
-            # Used by ctf_binary MCP server
+            # Used by ctf_pwn MCP server
             checksec
             radare2
 

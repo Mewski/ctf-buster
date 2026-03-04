@@ -37,19 +37,19 @@ Encoding pipelines, cryptographic attacks, and mathematical solving.
 | `crypto_hash_crack` | Identify hash type and attempt lightweight dictionary cracking. Supports MD5, SHA-1, SHA-256, SHA-512, bcrypt, crypt variants. |
 | `crypto_frequency_analysis` | Character and bigram frequency analysis, chi-squared English scoring, and index of coincidence for classical cipher analysis. |
 
-## ctf-binary (Python) -- 8 tools
+## ctf-pwn (Python) -- 8 tools
 
 Binary analysis and exploit development.
 
 | Tool | Description |
 |------|-------------|
-| `binary_triage` | Comprehensive one-shot analysis -- file type, checksec mitigations, architecture, imports/exports, sections, dangerous functions, interesting strings. |
-| `binary_disassemble` | Disassemble a function or address range using radare2. |
-| `binary_rop_gadgets` | Search for ROP gadgets using ROPgadget with optional filters. |
-| `binary_pattern_offset` | Generate cyclic patterns or find crash offsets using pwntools. |
-| `binary_shellcode_generate` | Generate shellcode via pwntools shellcraft (sh, cat_flag, connect_back, execve) for amd64/i386/arm/aarch64/mips. |
-| `binary_pwntools_template` | Generate a complete pwntools exploit script skeleton (ret2win, ret2libc, format_string, shellcode) from binary analysis. |
-| `binary_angr_analyze` | Symbolic execution via angr -- auto mode finds flag-like output, find_addr reaches specific addresses, find_string matches output. |
+| `pwn_triage` | Comprehensive one-shot analysis -- file type, checksec mitigations, architecture, imports/exports, sections, dangerous functions, interesting strings. |
+| `pwn_disassemble` | Disassemble a function or address range using radare2. |
+| `pwn_rop_gadgets` | Search for ROP gadgets using ROPgadget with optional filters. |
+| `pwn_pattern_offset` | Generate cyclic patterns or find crash offsets using pwntools. |
+| `pwn_shellcode_generate` | Generate shellcode via pwntools shellcraft (sh, cat_flag, connect_back, execve) for amd64/i386/arm/aarch64/mips. |
+| `pwn_pwntools_template` | Generate a complete pwntools exploit script skeleton (ret2win, ret2libc, format_string, shellcode) from binary analysis. |
+| `pwn_angr_analyze` | Symbolic execution via angr -- auto mode finds flag-like output, find_addr reaches specific addresses, find_string matches output. |
 
 ## ctf-forensics (Python) -- 5 tools
 
@@ -75,15 +75,15 @@ Dynamic binary analysis using GDB batch mode.
 | `gdb_memory_dump` | Read memory at specific addresses at a given execution point. Returns hex dump and ASCII interpretation. |
 | `gdb_checksec_runtime` | Get runtime security info -- actual ASLR state, libc base address, process mappings, GOT entries, and resolved symbol addresses. |
 
-## ctf-re (Python) -- 6 tools
+## ctf-rev (Python) -- 6 tools
 
 Deep static analysis using radare2.
 
 | Tool | Description |
 |------|-------------|
-| `r2_functions` | List all functions with addresses, sizes, basic block counts, and call targets after full analysis. |
-| `r2_xrefs` | Find cross-references to/from a function or address. Shows call graph relationships (who calls what). |
-| `r2_decompile` | Decompile a function to pseudocode. Tries r2ghidra (pdg), r2dec (pdd), then falls back to annotated disassembly. |
-| `r2_strings_xrefs` | List strings with which functions reference them. Optional regex filter (e.g., "flag\|password\|key"). |
-| `r2_cfg` | Extract control flow graph for a function -- basic blocks, instructions, branch targets, and conditions. |
-| `r2_diff` | Compare two binaries to find byte-level differences. Useful for patch analysis challenges. |
+| `rev_functions` | List all functions with addresses, sizes, basic block counts, and call targets after full analysis. |
+| `rev_xrefs` | Find cross-references to/from a function or address. Shows call graph relationships (who calls what). |
+| `rev_decompile` | Decompile a function to pseudocode. Tries r2ghidra (pdg), r2dec (pdd), then falls back to annotated disassembly. |
+| `rev_strings_xrefs` | List strings with which functions reference them. Optional regex filter (e.g., "flag\|password\|key"). |
+| `rev_cfg` | Extract control flow graph for a function -- basic blocks, instructions, branch targets, and conditions. |
+| `rev_diff` | Compare two binaries to find byte-level differences. Useful for patch analysis challenges. |

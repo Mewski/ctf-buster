@@ -18,9 +18,9 @@ Place in your workspace root:
       "command": "python3",
       "args": ["./tools/ctf_crypto.py"]
     },
-    "ctf-binary": {
+    "ctf-pwn": {
       "command": "python3",
-      "args": ["./tools/ctf_binary.py"]
+      "args": ["./tools/ctf_pwn.py"]
     },
     "ctf-forensics": {
       "command": "python3",
@@ -30,9 +30,9 @@ Place in your workspace root:
       "command": "python3",
       "args": ["./tools/ctf_gdb.py"]
     },
-    "ctf-re": {
+    "ctf-rev": {
       "command": "python3",
-      "args": ["./tools/ctf_re.py"]
+      "args": ["./tools/ctf_rev.py"]
     }
   }
 }
@@ -43,10 +43,10 @@ Place in your workspace root:
 ```bash
 claude mcp add -s user ctf-buster -- /path/to/target/release/ctf mcp --workspace /path/to/workspace
 claude mcp add -s user ctf-crypto -- python3 /path/to/tools/ctf_crypto.py
-claude mcp add -s user ctf-binary -- python3 /path/to/tools/ctf_binary.py
+claude mcp add -s user ctf-pwn -- python3 /path/to/tools/ctf_pwn.py
 claude mcp add -s user ctf-forensics -- python3 /path/to/tools/ctf_forensics.py
 claude mcp add -s user ctf-gdb -- python3 /path/to/tools/ctf_gdb.py
-claude mcp add -s user ctf-re -- python3 /path/to/tools/ctf_re.py
+claude mcp add -s user ctf-rev -- python3 /path/to/tools/ctf_rev.py
 ```
 
 ## Typical Workflow
@@ -55,7 +55,7 @@ claude mcp add -s user ctf-re -- python3 /path/to/tools/ctf_re.py
 2. `ctf_challenges` -- browse available challenges
 3. `ctf_challenge_detail` -- read a specific challenge description
 4. `ctf_download_files` -- pull challenge attachments into the workspace
-5. Use domain tools (`binary_triage`, `file_triage`, `rsa_toolkit`, etc.)
+5. Use domain tools (`pwn_triage`, `file_triage`, `rsa_toolkit`, etc.)
 6. `ctf_submit_flag` -- submit the flag
 
 ## Multi-Agent Orchestration

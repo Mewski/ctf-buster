@@ -29,7 +29,7 @@ workspace.
                                 |
     +--------+--------+---------+---------+---------+--------+
     |        |        |                   |         |        |
-ctf-buster ctf-crypto ctf-binary  ctf-forensics  ctf-gdb  ctf-re
+ctf-buster ctf-crypto ctf-pwn    ctf-forensics  ctf-gdb  ctf-rev
   (Rust)   (Python)   (Python)     (Python)     (Python) (Python)
  14 tools  6 tools    8 tools      5 tools      5 tools  6 tools
     |          |          |            |            |        |

@@ -7,10 +7,10 @@ AI-powered CTF competition toolkit. Rust CLI + 6 MCP servers (44 tools total).
 ```
 ctf-buster (Rust)      — 14 tools: platform interaction (CTFd/rCTF), queue management, auto-orchestration, writeups
 ctf-crypto (Python)    — 6 tools: encoding chains, RSA attacks, constraint solving
-ctf-binary (Python)    — 8 tools: triage, disassembly, ROP, pwntools, angr
+ctf-pwn (Python)       — 8 tools: triage, disassembly, ROP, pwntools, angr
 ctf-forensics (Python) — 5 tools: file analysis, stego, extraction, entropy
 ctf-gdb (Python)       — 5 tools: GDB dynamic analysis, breakpoints, input tracing
-ctf-re (Python)        — 6 tools: decompilation, xrefs, CFG, function analysis
+ctf-rev (Python)       — 6 tools: decompilation, xrefs, CFG, function analysis
 ```
 
 All servers communicate over MCP stdio transport.
@@ -171,7 +171,7 @@ The generated prompts follow this structure:
 **Flag detection rules for subagents:**
 - Scan ALL tool output (stdout, extracted data, decoded text, solver results) for flag patterns
 - Common patterns: `flag{...}`, `CTF{...}`, `FLAG{...}`, `ctf{...}`, or the competition-specific format from `ctf_workspace_status`
-- If a tool like `binary_angr_analyze`, `crypto_transform_chain`, `crypto_rsa_toolkit`, or `forensics_stego_analyze` returns output containing a flag, **submit it immediately**
+- If a tool like `pwn_angr_analyze`, `crypto_transform_chain`, `crypto_rsa_toolkit`, or `forensics_stego_analyze` returns output containing a flag, **submit it immediately**
 - When multiple flag candidates exist, submit each one — `ctf_submit_flag` reports correct/incorrect so you'll know which worked
 - Never hold a flag without submitting. The moment you see it, submit it.
 
@@ -187,34 +187,34 @@ For parallel execution, launch multiple subagents in a single message using the 
 - `crypto_frequency_analysis` for classical ciphers
 
 **Binary/Pwn challenges:** (solve.py has a pwntools skeleton with ELF/remote setup — fill in the exploit)
-- `binary_triage` first — get checksec, imports, dangerous functions, architecture
-- `binary_disassemble` to read key functions
-- `r2_decompile` for pseudocode (r2ghidra/r2dec fallback chain)
-- `r2_functions` to list all functions with sizes and call targets
-- `r2_xrefs` to trace call graphs and cross-references
-- `r2_cfg` for control flow graph analysis
-- `r2_strings_xrefs` to find which functions reference interesting strings
+- `pwn_triage` first — get checksec, imports, dangerous functions, architecture
+- `pwn_disassemble` to read key functions
+- `rev_decompile` for pseudocode (r2ghidra/r2dec fallback chain)
+- `rev_functions` to list all functions with sizes and call targets
+- `rev_xrefs` to trace call graphs and cross-references
+- `rev_cfg` for control flow graph analysis
+- `rev_strings_xrefs` to find which functions reference interesting strings
 - `gdb_break_inspect` to examine registers/stack/memory at breakpoints
 - `gdb_trace_input` to find buffer overflow offsets (cyclic pattern + crash analysis)
 - `gdb_memory_dump` to read memory at specific addresses during execution
 - `gdb_checksec_runtime` for runtime security info (ASLR, libc base, GOT, symbols)
 - `gdb_run` for general GDB command execution
-- `binary_angr_analyze` for automatic solving of simple stack-based challenges:
+- `pwn_angr_analyze` for automatic solving of simple stack-based challenges:
   - `auto` mode: finds inputs producing flag-like output
   - `find_addr` mode: finds inputs reaching a specific address
   - `find_string` mode: finds inputs causing specific output
-- `binary_rop_gadgets` for ROP chains
-- `binary_pattern_offset` to find buffer overflow offsets
-- `binary_pwntools_template` to generate exploit scripts
-- `binary_shellcode_generate` for shellcode payloads
+- `pwn_rop_gadgets` for ROP chains
+- `pwn_pattern_offset` to find buffer overflow offsets
+- `pwn_pwntools_template` to generate exploit scripts
+- `pwn_shellcode_generate` for shellcode payloads
 
 **Reverse engineering challenges:** (solve.py has subprocess/struct imports — add decoder/keygen logic)
-- `r2_functions` to get an overview of all functions
-- `r2_decompile` for pseudocode of key functions
-- `r2_xrefs` to trace call graphs (who calls what)
-- `r2_strings_xrefs` to find functions referencing flag/password/key strings
-- `r2_cfg` to analyze control flow and branch conditions
-- `r2_diff` to compare patched vs original binaries
+- `rev_functions` to get an overview of all functions
+- `rev_decompile` for pseudocode of key functions
+- `rev_xrefs` to trace call graphs (who calls what)
+- `rev_strings_xrefs` to find functions referencing flag/password/key strings
+- `rev_cfg` to analyze control flow and branch conditions
+- `rev_diff` to compare patched vs original binaries
 - `gdb_break_inspect` to validate static analysis with runtime state
 
 **Forensics/Stego challenges:** (solve.py is minimal — most work uses MCP tools, add extraction logic if needed)
@@ -312,10 +312,10 @@ src/                    Rust CLI + MCP server
   workspace/            Scaffolding + state management
 tools/                  Python MCP servers
   ctf_crypto.py         Crypto & encoding server
-  ctf_binary.py         Binary analysis server
+  ctf_pwn.py            Binary analysis server
   ctf_forensics.py      Forensics & stego server
   ctf_gdb.py            GDB dynamic analysis server
-  ctf_re.py             Reverse engineering server
+  ctf_rev.py            Reverse engineering server
   lib/                  Shared subprocess utilities
   tests/                Python test suite
 docs/                   Extended documentation
@@ -345,10 +345,10 @@ name = "my-ctf"
 ```bash
 claude mcp add -s user ctf-buster -- /path/to/target/release/ctf mcp --workspace /path/to/workspace
 claude mcp add -s user ctf-crypto -- python3 /path/to/tools/ctf_crypto.py
-claude mcp add -s user ctf-binary -- python3 /path/to/tools/ctf_binary.py
+claude mcp add -s user ctf-pwn -- python3 /path/to/tools/ctf_pwn.py
 claude mcp add -s user ctf-forensics -- python3 /path/to/tools/ctf_forensics.py
 claude mcp add -s user ctf-gdb -- python3 /path/to/tools/ctf_gdb.py
-claude mcp add -s user ctf-re -- python3 /path/to/tools/ctf_re.py
+claude mcp add -s user ctf-rev -- python3 /path/to/tools/ctf_rev.py
 ```
 
 **Via `.mcp.json` (recommended):**
@@ -364,9 +364,9 @@ claude mcp add -s user ctf-re -- python3 /path/to/tools/ctf_re.py
       "command": "python3",
       "args": ["./tools/ctf_crypto.py"]
     },
-    "ctf-binary": {
+    "ctf-pwn": {
       "command": "python3",
-      "args": ["./tools/ctf_binary.py"]
+      "args": ["./tools/ctf_pwn.py"]
     },
     "ctf-forensics": {
       "command": "python3",
@@ -376,9 +376,9 @@ claude mcp add -s user ctf-re -- python3 /path/to/tools/ctf_re.py
       "command": "python3",
       "args": ["./tools/ctf_gdb.py"]
     },
-    "ctf-re": {
+    "ctf-rev": {
       "command": "python3",
-      "args": ["./tools/ctf_re.py"]
+      "args": ["./tools/ctf_rev.py"]
     }
   }
 }

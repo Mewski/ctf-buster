@@ -11,7 +11,7 @@ Model Context Protocol, allowing AI agents to orchestrate CTF challenge solving.
                                 |
     +--------+--------+---------+---------+---------+--------+
     |        |        |                   |         |        |
-ctf-buster ctf-crypto ctf-binary  ctf-forensics  ctf-gdb  ctf-re
+ctf-buster ctf-crypto ctf-pwn    ctf-forensics  ctf-gdb  ctf-rev
   (Rust)   (Python)   (Python)     (Python)     (Python) (Python)
  14 tools  6 tools    8 tools      5 tools      5 tools  6 tools
     |          |          |            |            |        |
@@ -64,18 +64,18 @@ src/
 ```
 tools/
   ctf_crypto.py        Crypto & encoding MCP server (6 tools, FastMCP)
-  ctf_binary.py        Binary analysis MCP server (8 tools, FastMCP)
+  ctf_pwn.py           Binary analysis MCP server (8 tools, FastMCP)
   ctf_forensics.py     Forensics & stego MCP server (5 tools, FastMCP)
   ctf_gdb.py           GDB dynamic analysis MCP server (5 tools, FastMCP)
-  ctf_re.py            Reverse engineering MCP server (6 tools, FastMCP)
+  ctf_rev.py           Reverse engineering MCP server (6 tools, FastMCP)
   lib/
     subprocess_utils.py  Shared utilities: safe subprocess execution, checksec parsing
   tests/
     test_crypto.py     Crypto tool tests
-    test_binary.py     Binary tool tests
+    test_pwn.py        Binary tool tests
     test_forensics.py  Forensics tool tests
     test_gdb.py        GDB tool tests
-    test_re.py         RE tool tests
+    test_rev.py        RE tool tests
     test_subprocess_utils.py  Utility tests
 ```
 
