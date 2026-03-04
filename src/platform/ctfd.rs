@@ -462,6 +462,13 @@ impl Platform for CtfdPlatform {
 
     let req = self.client.get(&url);
     let resp = self.apply_auth(req).send().await?;
+    if !resp.status().is_success() {
+      return Err(Error::Platform(format!(
+        "Failed to download file '{}' (HTTP {})",
+        file.name,
+        resp.status()
+      )));
+    }
 
     let bytes = resp.bytes().await?;
     tokio::fs::write(dest, &bytes).await?;

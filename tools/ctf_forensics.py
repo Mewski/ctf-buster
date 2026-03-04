@@ -5,6 +5,7 @@ import json
 import math
 import os
 import re
+import shlex
 import sys
 import tempfile
 
@@ -763,7 +764,7 @@ def forensics_volatility(
 
     cmd = ["vol", "-f", path, plugin]
     if extra_args:
-        cmd.extend(extra_args.split())
+        cmd.extend(shlex.split(extra_args))
 
     result = {"dump": path, "plugin": plugin}
 

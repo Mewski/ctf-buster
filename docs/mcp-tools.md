@@ -2,7 +2,7 @@
 
 CTF-Buster provides 50 tools across 6 MCP servers.
 
-## ctf-buster (Rust) -- 14 tools
+## ctf-buster (Rust) -- 15 tools
 
 Platform interaction, workspace management, auto-orchestration, and documentation.
 
@@ -39,7 +39,7 @@ Encoding pipelines, cryptographic attacks, and mathematical solving.
 | `crypto_xor_analyze` | XOR key recovery and analysis -- known-plaintext attack, Kasiski examination, Index of Coincidence key length estimation, single-byte brute force, multi-byte key recovery. |
 | `crypto_sage_solve` | Execute SageMath scripts for finite field math, lattice reduction, discrete log, and polynomial solving. Returns stdout/stderr with optional JSON parsing. |
 
-## ctf-pwn (Python) -- 11 tools
+## ctf-pwn (Python) -- 10 tools
 
 Binary analysis and exploit development.
 

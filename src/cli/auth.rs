@@ -32,22 +32,13 @@ pub fn store_token(workspace_name: &str, token: &str) -> Result<()> {
 /// Expand environment variable references in a string.
 /// Supports `${VAR}` and `${VAR:-default}` syntax.
 pub fn expand_env_vars(s: &str) -> String {
-  let mut result = s.to_string();
-  // Match ${VAR} and ${VAR:-default}
   let re = regex_lite::Regex::new(r"\$\{([^}:]+)(?::-([^}]*))?\}").unwrap();
-  while let Some(caps) = re.captures(&result) {
-    let full_match = caps.get(0).unwrap();
+  re.replace_all(s, |caps: &regex_lite::Captures| {
     let var_name = caps.get(1).unwrap().as_str();
     let default_val = caps.get(2).map(|m| m.as_str()).unwrap_or("");
-    let replacement = std::env::var(var_name).unwrap_or_else(|_| default_val.to_string());
-    result = format!(
-      "{}{}{}",
-      &result[..full_match.start()],
-      replacement,
-      &result[full_match.end()..]
-    );
-  }
-  result
+    std::env::var(var_name).unwrap_or_else(|_| default_val.to_string())
+  })
+  .into_owned()
 }
 
 /// Resolve the API token from multiple sources (in priority order):

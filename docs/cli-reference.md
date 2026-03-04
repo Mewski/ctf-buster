@@ -17,6 +17,7 @@ The binary is named `ctf`. All commands support `--output table|json|plain`.
 | `ctf files <id_or_name>` | `dl` | Download challenge files into the workspace `dist/` directory. |
 | `ctf scoreboard` | `sb` | Show competition scoreboard. Use `--limit <n>` to control how many entries (default 10). |
 | `ctf status` | | Dashboard showing team info, score, rank, and per-category solve progress. |
+| `ctf dashboard` | `dash` | Launch a TUI dashboard showing challenges, queue, and progress. Polls `.ctf-state.json` every 2 seconds. |
 | `ctf mcp` | | Run as an MCP server over stdio. Optionally pass `--workspace <path>` or set `CTF_WORKSPACE`. |
 
 ## Examples

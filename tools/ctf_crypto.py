@@ -116,7 +116,7 @@ def _apply_op(data: str, op: str) -> str:
         return " ".join(str(ord(c)) for c in data)
     elif op == "decimal_to_ascii":
         nums = re.findall(r"\d+", data)
-        return "".join(chr(int(n)) for n in nums)
+        return "".join(chr(int(n)) for n in nums if int(n) <= 0x10FFFF)
     elif op == "atbash":
         table = str.maketrans(
             string.ascii_lowercase + string.ascii_uppercase,
@@ -507,6 +507,10 @@ def crypto_math_solve(mode: str, expression: str, variables: str = "") -> str:
         ns["hex"] = hex
         ns["bin"] = bin
         ns["bytes"] = bytes
+        if "__" in expression:
+            return json.dumps(
+                {"error": "Expression contains forbidden dunder access"}, indent=2
+            )
         try:
             result = eval(expression, {"__builtins__": {}}, ns)
             return json.dumps({"result": str(result)}, indent=2)
@@ -525,6 +529,13 @@ def crypto_math_solve(mode: str, expression: str, variables: str = "") -> str:
         constraints = [c.strip() for c in expression.split(";") if c.strip()]
 
         for constraint in constraints:
+            if "__" in constraint:
+                return json.dumps(
+                    {
+                        "error": f"Constraint contains forbidden dunder access: '{constraint}'"
+                    },
+                    indent=2,
+                )
             try:
                 parsed = eval(constraint, {"__builtins__": {}}, z3_vars)
                 solver.add(parsed)

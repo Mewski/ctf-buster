@@ -31,7 +31,7 @@ workspace.
     |        |        |                   |         |        |
 ctf-buster ctf-crypto ctf-pwn    ctf-forensics  ctf-gdb  ctf-rev
   (Rust)   (Python)   (Python)     (Python)     (Python) (Python)
- 14 tools  6 tools    8 tools      5 tools      5 tools  6 tools
+ 15 tools  8 tools   10 tools      6 tools      5 tools  6 tools
     |          |          |            |            |        |
  CTFd/rCTF  sympy,z3  radare2,pwn  binwalk,    GDB      radare2
  platforms  crypto    ROPgadget    zsteg,PIL   batch     r2ghidra

@@ -5,9 +5,9 @@ AI-powered CTF competition toolkit. Rust CLI + 6 MCP servers (50 tools total).
 ## Architecture
 
 ```
-ctf-buster (Rust)      — 14 tools: platform interaction (CTFd/rCTF), queue management, auto-orchestration, writeups
+ctf-buster (Rust)      — 15 tools: platform interaction (CTFd/rCTF), queue management, auto-orchestration, writeups
 ctf-crypto (Python)    — 8 tools: encoding chains, RSA attacks, constraint solving, XOR analysis, SageMath
-ctf-pwn (Python)       — 11 tools: triage, disassembly, ROP, pwntools, angr, format strings, libc lookup
+ctf-pwn (Python)       — 10 tools: triage, disassembly, ROP, pwntools, angr, format strings, libc lookup
 ctf-forensics (Python) — 6 tools: file analysis, stego, extraction, entropy, volatility
 ctf-gdb (Python)       — 5 tools: GDB dynamic analysis, breakpoints, input tracing
 ctf-rev (Python)       — 6 tools: decompilation, xrefs, CFG, function analysis

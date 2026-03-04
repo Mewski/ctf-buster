@@ -55,7 +55,7 @@ claude mcp add -s user ctf-rev -- python3 /path/to/tools/ctf_rev.py
 2. `ctf_challenges` -- browse available challenges
 3. `ctf_challenge_detail` -- read a specific challenge description
 4. `ctf_download_files` -- pull challenge attachments into the workspace
-5. Use domain tools (`pwn_triage`, `file_triage`, `rsa_toolkit`, etc.)
+5. Use domain tools (`pwn_triage`, `forensics_file_triage`, `crypto_rsa_toolkit`, etc.)
 6. `ctf_submit_flag` -- submit the flag
 
 ## Multi-Agent Orchestration

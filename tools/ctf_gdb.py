@@ -143,6 +143,7 @@ def gdb_run(
 
     preamble = []
     main_cmds = list(commands)
+    stdin_path = None
 
     has_run = any(
         c.strip().startswith(("run", "r ", "start", "starti")) for c in commands
@@ -151,36 +152,43 @@ def gdb_run(
         stdin_path = _write_temp(stdin, suffix=".stdin", mode="wb")
         preamble.append(f"run < {stdin_path}")
 
-    script = _build_gdb_script(preamble, main_cmds)
-    result = _run_gdb(
-        path,
-        script,
-        args=args,
-        stdin_data=stdin if has_run else None,
-        timeout=timeout,
-    )
+    try:
+        script = _build_gdb_script(preamble, main_cmds)
+        result = _run_gdb(
+            path,
+            script,
+            args=args,
+            stdin_data=stdin if has_run else None,
+            timeout=timeout,
+        )
 
-    output = result["stdout"] + result.get("stderr", "")
+        output = result["stdout"] + result.get("stderr", "")
 
-    parsed = {
-        "path": path,
-        "commands": commands,
-        "output": output[:10000],
-        "returncode": result["returncode"],
-    }
+        parsed = {
+            "path": path,
+            "commands": commands,
+            "output": output[:10000],
+            "returncode": result["returncode"],
+        }
 
-    if "error" in result:
-        parsed["error"] = result["error"]
+        if "error" in result:
+            parsed["error"] = result["error"]
 
-    registers = _parse_registers(output)
-    if registers:
-        parsed["registers"] = registers
+        registers = _parse_registers(output)
+        if registers:
+            parsed["registers"] = registers
 
-    backtrace = _parse_backtrace(output)
-    if backtrace:
-        parsed["backtrace"] = backtrace
+        backtrace = _parse_backtrace(output)
+        if backtrace:
+            parsed["backtrace"] = backtrace
 
-    return json.dumps(parsed, indent=2)
+        return json.dumps(parsed, indent=2)
+    finally:
+        if stdin_path:
+            try:
+                os.unlink(stdin_path)
+            except OSError:
+                pass
 
 
 @mcp.tool()
@@ -219,6 +227,7 @@ def gdb_break_inspect(
         stdin = stdin_data.encode()
 
     main_cmds = []
+    stdin_path = None
     for bp in breakpoints:
         main_cmds.append(f"break {bp}")
 
@@ -244,45 +253,52 @@ def gdb_break_inspect(
         if i < len(breakpoints) - 1:
             main_cmds.append("continue")
 
-    script = _build_gdb_script([], main_cmds)
-    result = _run_gdb(path, script, args=args, timeout=30)
-    output = result["stdout"] + result.get("stderr", "")
+    try:
+        script = _build_gdb_script([], main_cmds)
+        result = _run_gdb(path, script, args=args, timeout=30)
+        output = result["stdout"] + result.get("stderr", "")
 
-    snapshots = []
-    sections = re.split(r"===BREAKPOINT_(\d+)_(.+?)===", output)
+        snapshots = []
+        sections = re.split(r"===BREAKPOINT_(\d+)_(.+?)===", output)
 
-    i = 1
-    while i + 2 < len(sections):
-        bp_name = sections[i + 1]
-        bp_output = sections[i + 2]
+        i = 1
+        while i + 2 < len(sections):
+            bp_name = sections[i + 1]
+            bp_output = sections[i + 2]
 
-        snapshot = {
-            "breakpoint": bp_name,
-            "registers": _parse_registers(bp_output),
-            "backtrace": _parse_backtrace(bp_output),
+            snapshot = {
+                "breakpoint": bp_name,
+                "registers": _parse_registers(bp_output),
+                "backtrace": _parse_backtrace(bp_output),
+            }
+
+            stack_match = re.search(r"===STACK===(.*?)(?:===|$)", bp_output, re.DOTALL)
+            if stack_match:
+                snapshot["stack"] = _parse_memory(stack_match.group(1))
+
+            mem_match = re.search(r"===MEMORY===(.*?)(?:===|$)", bp_output, re.DOTALL)
+            if mem_match:
+                snapshot["memory"] = _parse_memory(mem_match.group(1))
+
+            snapshots.append(snapshot)
+            i += 3
+
+        parsed = {
+            "path": path,
+            "breakpoints": breakpoints,
+            "snapshots": snapshots,
+            "raw_output": output[:5000],
         }
+        if "error" in result:
+            parsed["error"] = result["error"]
 
-        stack_match = re.search(r"===STACK===(.*?)(?:===|$)", bp_output, re.DOTALL)
-        if stack_match:
-            snapshot["stack"] = _parse_memory(stack_match.group(1))
-
-        mem_match = re.search(r"===MEMORY===(.*?)(?:===|$)", bp_output, re.DOTALL)
-        if mem_match:
-            snapshot["memory"] = _parse_memory(mem_match.group(1))
-
-        snapshots.append(snapshot)
-        i += 3
-
-    parsed = {
-        "path": path,
-        "breakpoints": breakpoints,
-        "snapshots": snapshots,
-        "raw_output": output[:5000],
-    }
-    if "error" in result:
-        parsed["error"] = result["error"]
-
-    return json.dumps(parsed, indent=2)
+        return json.dumps(parsed, indent=2)
+    finally:
+        if stdin_path:
+            try:
+                os.unlink(stdin_path)
+            except OSError:
+                pass
 
 
 @mcp.tool()
@@ -460,6 +476,7 @@ def gdb_memory_dump(
     elif stdin_data:
         stdin = stdin_data.encode()
 
+    stdin_path = None
     main_cmds = [f"break {breakpoint}"]
     if stdin is not None:
         stdin_path = _write_temp(stdin, suffix=".stdin", mode="wb")
@@ -477,40 +494,47 @@ def gdb_memory_dump(
         main_cmds.append(f"echo ===ASCII_{label}===\\n")
         main_cmds.append(f"x/{count}cb {addr}")
 
-    script = _build_gdb_script([], main_cmds)
-    result = _run_gdb(path, script, args=args, stdin_data=stdin, timeout=30)
-    output = result["stdout"] + result.get("stderr", "")
+    try:
+        script = _build_gdb_script([], main_cmds)
+        result = _run_gdb(path, script, args=args, stdin_data=stdin, timeout=30)
+        output = result["stdout"] + result.get("stderr", "")
 
-    memory_regions = []
-    for addr_spec in addresses:
-        label = addr_spec.replace("$", "REG_")
-        region = {"address": addr_spec}
+        memory_regions = []
+        for addr_spec in addresses:
+            label = addr_spec.replace("$", "REG_")
+            region = {"address": addr_spec}
 
-        dump_match = re.search(
-            rf"===DUMP_{re.escape(label)}===(.*?)===ASCII_{re.escape(label)}===",
-            output,
-            re.DOTALL,
-        )
-        if dump_match:
-            region["hex_dump"] = _parse_memory(dump_match.group(1))
+            dump_match = re.search(
+                rf"===DUMP_{re.escape(label)}===(.*?)===ASCII_{re.escape(label)}===",
+                output,
+                re.DOTALL,
+            )
+            if dump_match:
+                region["hex_dump"] = _parse_memory(dump_match.group(1))
 
-        ascii_match = re.search(
-            rf"===ASCII_{re.escape(label)}===(.*?)(?:===|$)", output, re.DOTALL
-        )
-        if ascii_match:
-            region["ascii"] = _parse_memory(ascii_match.group(1))
+            ascii_match = re.search(
+                rf"===ASCII_{re.escape(label)}===(.*?)(?:===|$)", output, re.DOTALL
+            )
+            if ascii_match:
+                region["ascii"] = _parse_memory(ascii_match.group(1))
 
-        memory_regions.append(region)
+            memory_regions.append(region)
 
-    parsed = {
-        "path": path,
-        "breakpoint": breakpoint,
-        "memory": memory_regions,
-    }
-    if "error" in result:
-        parsed["error"] = result["error"]
+        parsed = {
+            "path": path,
+            "breakpoint": breakpoint,
+            "memory": memory_regions,
+        }
+        if "error" in result:
+            parsed["error"] = result["error"]
 
-    return json.dumps(parsed, indent=2)
+        return json.dumps(parsed, indent=2)
+    finally:
+        if stdin_path:
+            try:
+                os.unlink(stdin_path)
+            except OSError:
+                pass
 
 
 @mcp.tool()

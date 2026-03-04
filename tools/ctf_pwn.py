@@ -252,6 +252,10 @@ def pwn_pattern_offset(
 
         try:
             offset = cyclic_find(val_bytes)
+            if offset == -1:
+                return json.dumps(
+                    {"error": f"Value {value} not found in cyclic pattern"}, indent=2
+                )
             return json.dumps({"value": value, "offset": offset}, indent=2)
         except Exception as e:
             return json.dumps({"error": str(e)}, indent=2)
@@ -293,6 +297,28 @@ def pwn_shellcode_generate(
                 args = payload[len("execve(") : -1]
                 sc = pwn.shellcraft.execve(args)
             else:
+                ALLOWED_SHELLCRAFT = {
+                    "sh",
+                    "cat",
+                    "cat2",
+                    "nop",
+                    "infloop",
+                    "trap",
+                    "exit",
+                    "pushstr",
+                    "echo",
+                    "write",
+                    "read",
+                    "open",
+                    "close",
+                }
+                if payload not in ALLOWED_SHELLCRAFT:
+                    return json.dumps(
+                        {
+                            "error": f"Unknown payload type: {payload}. Supported: sh, cat_flag, connect_back(host,port), execve(path), {', '.join(sorted(ALLOWED_SHELLCRAFT))}"
+                        },
+                        indent=2,
+                    )
                 sc = getattr(pwn.shellcraft, payload)()
 
             assembled = pwn.asm(sc)

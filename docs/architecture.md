@@ -13,7 +13,7 @@ Model Context Protocol, allowing AI agents to orchestrate CTF challenge solving.
     |        |        |                   |         |        |
 ctf-buster ctf-crypto ctf-pwn    ctf-forensics  ctf-gdb  ctf-rev
   (Rust)   (Python)   (Python)     (Python)     (Python) (Python)
- 14 tools  6 tools    8 tools      5 tools      5 tools  6 tools
+ 15 tools  8 tools   10 tools      6 tools      5 tools  6 tools
     |          |          |            |            |        |
  CTFd/rCTF  sympy,z3  radare2,pwn  binwalk,    GDB      radare2
  platforms  crypto    ROPgadget    zsteg,PIL   batch     r2ghidra
@@ -51,7 +51,7 @@ src/
     mod.rs             Module exports
     table.rs           Table formatting for CLI display
   mcp/
-    mod.rs             MCP server with 14 tools (rmcp framework)
+    mod.rs             MCP server with 15 tools (rmcp framework)
     types.rs           MCP parameter types (schemars for JSON schema)
   tui/
     mod.rs             Module exports
@@ -63,9 +63,9 @@ src/
 
 ```
 tools/
-  ctf_crypto.py        Crypto & encoding MCP server (6 tools, FastMCP)
-  ctf_pwn.py           Binary analysis MCP server (8 tools, FastMCP)
-  ctf_forensics.py     Forensics & stego MCP server (5 tools, FastMCP)
+  ctf_crypto.py        Crypto & encoding MCP server (8 tools, FastMCP)
+  ctf_pwn.py           Binary analysis MCP server (10 tools, FastMCP)
+  ctf_forensics.py     Forensics & stego MCP server (6 tools, FastMCP)
   ctf_gdb.py           GDB dynamic analysis MCP server (5 tools, FastMCP)
   ctf_rev.py           Reverse engineering MCP server (6 tools, FastMCP)
   lib/
