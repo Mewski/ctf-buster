@@ -74,30 +74,39 @@ Instead it uses two automation tools and launches subagents:
 while unsolved challenges remain:
   1. ctf_sync(full=true)                   # Fetch challenges + descriptions + files
   2. ctf_auto_queue()                      # Auto-score and queue all unsolved
-  3. ctf_generate_solve_prompt(count=N)    # Get prompts for top N (typically 3-5)
+  3. ctf_generate_solve_prompt(count=10)   # Get prompts for top 10
      — returns JSON with: prompt, recommended_model, subagent_type per challenge
      — auto-marks selected challenges as in_progress
-  4. Launch subagents via Task tool — one per challenge, in parallel:
+  4. Launch subagents via Task tool — one per challenge, ALL in parallel:
      Task(
        description="Solve <challenge_name>",
        prompt=<prompt from step 3>,
        model=<recommended_model from step 3>,  // "opus", "sonnet", or "haiku"
-       subagent_type="general-purpose"
+       subagent_type="general-purpose",
+       run_in_background=true                   // Non-blocking!
      )
-     Launch ALL in a single message for parallel execution.
-  5. Wait for subagents to return. Each will report: solved/unsolved/needs-help
-     Subagents auto-submit flags and auto-mark queue state (complete/fail).
-  6. Check progress: ctf_challenges(unsolved=true) to see what's left
-  7. Loop back to step 1 (re-sync catches team solves and new challenges)
+     Launch ALL in a single message for parallel execution using run_in_background=true.
+  5. Do NOT wait for all subagents. Instead, immediately loop back to step 1.
+     — ctf_sync + ctf_auto_queue will skip in_progress challenges automatically
+     — Generate prompts for the NEXT batch while previous agents are still running
+     — Periodically check on background agents via their output_file (Read tool)
+  6. When a batch of agents completes, review results and continue launching
 ```
 
 **One-command start:** When asked to "solve this CTF" or "start solving", execute steps
 1-4 immediately without asking for confirmation. The tools handle all scoring, prompt
 generation, and model selection automatically.
 
+**Continuous throughput:** Launch 10 subagents per batch using `run_in_background=true`.
+Do NOT wait for all to finish before launching more. The queue system handles deduplication:
+- `ctf_generate_solve_prompt` auto-marks challenges as in_progress
+- `ctf_auto_queue` skips in_progress and solved challenges
+- Subagents auto-submit flags and auto-mark queue state (complete/fail)
+This means you can safely launch the next batch immediately — no risk of duplicate work.
+
 **Result handling:** Subagents call `ctf_queue_update(action='complete')` on success and
-`ctf_queue_update(action='fail')` on failure. When all subagents return, call
-`ctf_challenges(unsolved=true)` to see remaining work. If challenges remain, loop.
+`ctf_queue_update(action='fail')` on failure. Periodically check `ctf_queue_status()` and
+`ctf_challenges(unsolved=true)` to monitor progress. Keep launching until queue is empty.
 
 Key orchestration rules:
 - **Always re-sync before each batch** — `ctf_sync()` catches solves from other subagents

@@ -2,9 +2,9 @@
   "mcpServers": {
     "ctf-buster": {
       "command": "./target/release/ctf",
-      "args": ["mcp", "--workspace", "."],
+      "args": ["mcp", "--workspace", "./pwnyctf"],
       "env": {
-        "CTF_TOKEN": "${CTF_TOKEN}"
+        "CTF_TOKEN": "a0f2b276-0556-4d1c-9014-6864076c4ae4.Y12m85zDBSbUez4q4I92iu7qogg"
       }
     },
     "ctf-crypto": {
