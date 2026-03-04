@@ -39,7 +39,7 @@ DANGEROUS_FUNCS = {
 
 
 def _pwn_triage_impl(path: str) -> str:
-    """Internal implementation of binary_triage (callable without MCP decorator)."""
+    """Internal implementation of pwn_triage (callable without MCP decorator)."""
     path = os.path.realpath(path)
     if not os.path.isfile(path):
         return json.dumps({"error": f"File not found: {path}"})
@@ -469,7 +469,7 @@ def pwn_pwntools_template(
 
             # Build payload
             offset = 0  # TODO: find with pattern_offset tool
-            buf_addr = 0x0  # TODO: find writable address (use binary_triage)
+            buf_addr = 0x0  # TODO: find writable address (use pwn_triage)
 
             payload = shellcode
             payload += b'A' * (offset - len(shellcode))

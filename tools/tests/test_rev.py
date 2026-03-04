@@ -77,7 +77,7 @@ class TestR2Cmd:
         assert "returncode" in result
 
 
-# ── r2_functions tool tests ──────────────────────────────────────────────────
+# ── rev_functions tool tests ─────────────────────────────────────────────────
 
 
 class TestR2Functions:
@@ -113,7 +113,7 @@ class TestR2Functions:
                 os.unlink(link_path)
 
 
-# ── r2_xrefs tool tests ─────────────────────────────────────────────────────
+# ── rev_xrefs tool tests ────────────────────────────────────────────────────
 
 
 class TestR2Xrefs:
@@ -165,7 +165,7 @@ class TestR2Xrefs:
             os.unlink(path)
 
 
-# ── r2_decompile tool tests ─────────────────────────────────────────────────
+# ── rev_decompile tool tests ────────────────────────────────────────────────
 
 
 class TestR2Decompile:
@@ -218,7 +218,7 @@ class TestR2Decompile:
             os.unlink(path)
 
 
-# ── r2_strings_xrefs tool tests ─────────────────────────────────────────────
+# ── rev_strings_xrefs tool tests ────────────────────────────────────────────
 
 
 class TestR2StringsXrefs:
@@ -249,7 +249,7 @@ class TestR2StringsXrefs:
             os.unlink(path)
 
 
-# ── r2_cfg tool tests ───────────────────────────────────────────────────────
+# ── rev_cfg tool tests ──────────────────────────────────────────────────────
 
 
 class TestR2Cfg:
@@ -279,7 +279,7 @@ class TestR2Cfg:
             os.unlink(path)
 
 
-# ── r2_diff tool tests ──────────────────────────────────────────────────────
+# ── rev_diff tool tests ─────────────────────────────────────────────────────
 
 
 class TestR2Diff:
