@@ -17,6 +17,8 @@ pub struct WorkspaceState {
   pub challenges: HashMap<String, ChallengeState>,
   #[serde(default)]
   pub notifications: Vec<CachedNotification>,
+  #[serde(default)]
+  pub orchestration: OrchestrationState,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,6 +62,34 @@ pub struct CachedNotification {
   pub title: String,
   pub content: String,
   pub date: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct OrchestrationState {
+  #[serde(default)]
+  pub queue: Vec<QueuedChallenge>,
+  #[serde(default)]
+  pub in_progress: Vec<String>,
+  #[serde(default)]
+  pub failed: Vec<FailedAttempt>,
+  #[serde(default)]
+  pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct QueuedChallenge {
+  pub name: String,
+  pub category: String,
+  pub priority: i32,
+  pub points: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FailedAttempt {
+  pub name: String,
+  pub category: String,
+  pub attempted_at: DateTime<Utc>,
+  pub notes: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -286,6 +316,20 @@ pub fn update_notifications(
       date: n.date.clone(),
     })
     .collect();
+  write_state(workspace_root, &state)
+}
+
+pub fn load_orchestration(workspace_root: &Path) -> Result<OrchestrationState> {
+  let state = load_state(workspace_root)?;
+  Ok(state.orchestration)
+}
+
+pub fn update_orchestration(
+  workspace_root: &Path,
+  orchestration: OrchestrationState,
+) -> Result<()> {
+  let mut state = load_state(workspace_root)?;
+  state.orchestration = orchestration;
   write_state(workspace_root, &state)
 }
 

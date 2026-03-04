@@ -1,6 +1,6 @@
 # CTF-Buster
 
-AI-powered CTF competition toolkit. Rust CLI + 4 MCP servers (26 tools total).
+AI-powered CTF competition toolkit. Rust CLI + 4 MCP servers (28 tools total).
 
 ## Architecture
 
@@ -20,12 +20,44 @@ When working on a CTF competition, use this multi-agent orchestration strategy.
 ### 1. Initial Recon
 
 ```
-ctf_sync(full=true)          # Fetch all challenges + descriptions + files
+ctf_sync(full=true)          # Fetch all challenges + descriptions + files + unlock free hints
 ctf_workspace_status()       # See score, progress, categories
 ctf_challenges(unsolved=true) # List what's left to solve
+ctf_notifications()          # Check for announcements, errata, format changes
 ```
 
-### 2. Orchestration Loop
+### 2. Challenge Priority Queue
+
+Score and sort unsolved challenges before launching subagents:
+
+```
+priority = category_score + difficulty_bonus + solve_bonus
+
+category_score (tool coverage strength):
+  crypto:     +10  (best tool coverage: rsa_toolkit, math_solve, transform_chain)
+  forensics:  +10  (best tool coverage: file_triage, stego_analyze, extract_embedded)
+  web:        +8   (good with curl/sqlmap/ffuf from bash)
+  rev:        +6   (disassemble + angr_analyze cover common patterns)
+  misc:       +4   (varies widely)
+  pwn:        +2   (often needs interactive exploitation beyond tool scope)
+
+difficulty_bonus:
+  "easy" tag or > 50 solves:  +20
+  "medium" tag or 20-50 solves: +10
+  "hard" tag or < 20 solves:  +0
+
+solve_bonus:
+  points / solves < 10:  +5  (likely easy, high value)
+```
+
+Queue rules:
+- Process in descending priority order
+- Batch by category when launching parallel subagents (shared context)
+- Skip challenges already being attempted by another subagent
+- Re-queue failed challenges with lower priority (-10) after one attempt
+- Time-box: if no progress after agent's full turn, mark as "needs-help" and move on
+
+### 3. Orchestration Loop
 
 The main agent acts as an **orchestrator** — it does NOT solve challenges directly.
 Instead it launches subagents and monitors progress:
@@ -33,11 +65,15 @@ Instead it launches subagents and monitors progress:
 ```
 while unsolved challenges remain:
   1. ctf_challenges(unsolved=true)         # Get current unsolved list
-  2. Prioritize: easy/low-solve challenges first, then by category strength
-  3. Launch subagents (Task tool) for batches of challenges
-  4. Wait for results, collect flags
-  5. ctf_workspace_status()                # Check updated score/progress
-  6. Re-sync if needed: ctf_sync()         # Picks up newly solved status
+  2. Score and sort by priority queue above
+  3. Take top N (N = parallel capacity, typically 3-5)
+  4. Group by category for context sharing
+  5. Select model per challenge (see Model Selection below)
+  6. Launch subagents (Task tool) for the batch
+  7. Collect results, submit any found flags
+  8. Re-queue failures with reduced priority
+  9. ctf_sync()                            # Catch team solves, new challenges
+  10. ctf_workspace_status()               # Check updated score/progress
 ```
 
 Key orchestration rules:
@@ -47,10 +83,33 @@ Key orchestration rules:
   solve with timestamp, flag, and points. `ctf_workspace_status` reads this.
 - **Re-sync periodically** — `ctf_sync()` updates local state from the platform, catching
   solves from other team members too
-- **Batch by difficulty** — start with "easy" tagged challenges, then "medium", then "hard"
-- **Time-box subagents** — if a challenge isn't progressing, move on and come back later
 
-### 3. Subagent Structure
+### 4. Model Selection for Subagents
+
+Select the model based on challenge characteristics:
+
+**opus** (deep reasoning, complex multi-step):
+- Crypto requiring mathematical reasoning (RSA, discrete log, custom ciphers)
+- Binary exploitation (pwn) requiring exploit chain development
+- Challenges where the first attempt failed and need deeper analysis
+- Any challenge worth > 300 points
+
+**sonnet** (fast, capable, good default):
+- Most challenges on first attempt
+- Web challenges (pattern matching + known techniques)
+- Forensics/stego (tool-driven, follow the output)
+- Easy/medium crypto (simple encoding chains, known ciphers)
+- Rev challenges with clear structure
+
+**haiku** (fast, lightweight):
+- Challenges with known solution patterns (just need tool execution)
+- Re-attempting with a clear approach that failed on execution
+- Simple encoding/decoding tasks
+- File extraction and triage-only tasks
+
+**Default: sonnet for first attempt, opus for retry on failure, haiku for pure tool execution.**
+
+### 5. Subagent Structure
 
 Each subagent receives a specific challenge (or small batch) to solve:
 
@@ -73,6 +132,10 @@ Subagent prompt pattern:
    5. If the flag is correct, report back as solved.
       If incorrect, continue analysis and try other candidates.
    6. Report back: solved/unsolved/needs-help"
+
+Launch subagent with:
+  model: select based on category + difficulty (see Model Selection)
+  subagent_type: "general-purpose"
 ```
 
 **Flag detection rules for subagents:**
@@ -84,7 +147,7 @@ Subagent prompt pattern:
 
 For parallel execution, launch multiple subagents in a single message using the Task tool.
 
-### 4. Category-Specific Approaches
+### 6. Category-Specific Approaches
 
 **Crypto challenges:**
 - `crypto_identify` to detect encoding/cipher type
@@ -117,7 +180,7 @@ For parallel execution, launch multiple subagents in a single message using the 
 - Use bash directly: curl, sqlmap, ffuf, nuclei, nikto, etc.
 - These tools work well from bash and don't need MCP wrapping
 
-### 5. Progress Tracking & Flag Submission
+### 7. Progress Tracking & Flag Submission
 
 - **Auto-submit immediately** — the moment any tool output, decoded string, solver result,
   or extracted data contains a flag-like pattern, call `ctf_submit_flag` right away. Do NOT
@@ -133,6 +196,8 @@ For parallel execution, launch multiple subagents in a single message using the 
   `mark_solved` function records challenge ID, name, points, flag, and solve timestamp.
 - **Platform sync** — `ctf_sync()` also detects solves made outside ctf-buster (e.g. by
   teammates) via the `solved_by_me` field from the API
+- **Notifications** — `ctf_notifications()` fetches platform announcements which may
+  contain hints, errata, or flag format changes
 
 ## Development
 
@@ -141,9 +206,9 @@ For parallel execution, launch multiple subagents in a single message using the 
 ```bash
 nix develop                                    # Enter devShell
 cargo build --release                          # Build Rust CLI
-cargo test                                     # Run Rust tests (56 tests)
+cargo test                                     # Run Rust tests (94 tests)
 cargo clippy -- -W clippy::all                 # Lint Rust
-python3 -m pytest tools/tests/                 # Run Python tests (151 tests)
+python3 -m pytest tools/tests/                 # Run Python tests (222 tests)
 python3 -m pytest tools/tests/ --cov=tools     # Python coverage
 cargo tarpaulin                                # Rust coverage
 ```
@@ -163,6 +228,7 @@ tools/                  Python MCP servers
   ctf_forensics.py      Forensics & stego server
   lib/                  Shared subprocess utilities
   tests/                Python test suite
+docs/                   Extended documentation
 ```
 
 ### Authentication

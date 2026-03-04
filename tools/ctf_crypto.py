@@ -27,7 +27,6 @@ mcp = FastMCP(
 
 def _apply_op(data: str, op: str) -> str:
     """Apply a single transformation operation."""
-    # Parameterized operations
     rot_match = re.match(r"rot\((\d+)\)", op)
     if rot_match:
         n = int(rot_match.group(1))
@@ -77,7 +76,6 @@ def _apply_op(data: str, op: str) -> str:
                 result.append(ch)
         return "".join(result)
 
-    # Simple operations
     if op == "base64_encode":
         return base64.b64encode(data.encode()).decode()
     elif op == "base64_decode":

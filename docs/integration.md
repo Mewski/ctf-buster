@@ -1,0 +1,58 @@
+# Claude Code Integration
+
+## MCP Server Registration
+
+### Via `.mcp.json` (recommended)
+
+Place in your workspace root:
+
+```json
+{
+  "mcpServers": {
+    "ctf-buster": {
+      "command": "./target/release/ctf",
+      "args": ["mcp", "--workspace", "."],
+      "env": { "CTF_TOKEN": "${CTF_TOKEN}" }
+    },
+    "ctf-crypto": {
+      "command": "python3",
+      "args": ["./tools/ctf_crypto.py"]
+    },
+    "ctf-binary": {
+      "command": "python3",
+      "args": ["./tools/ctf_binary.py"]
+    },
+    "ctf-forensics": {
+      "command": "python3",
+      "args": ["./tools/ctf_forensics.py"]
+    }
+  }
+}
+```
+
+### Via CLI
+
+```bash
+claude mcp add -s user ctf-buster -- /path/to/target/release/ctf mcp --workspace /path/to/workspace
+claude mcp add -s user ctf-crypto -- python3 /path/to/tools/ctf_crypto.py
+claude mcp add -s user ctf-binary -- python3 /path/to/tools/ctf_binary.py
+claude mcp add -s user ctf-forensics -- python3 /path/to/tools/ctf_forensics.py
+```
+
+## Typical Workflow
+
+1. `ctf_workspace_status` -- understand the current competition state
+2. `ctf_challenges` -- browse available challenges
+3. `ctf_challenge_detail` -- read a specific challenge description
+4. `ctf_download_files` -- pull challenge attachments into the workspace
+5. Use domain tools (`binary_triage`, `file_triage`, `rsa_toolkit`, etc.)
+6. `ctf_submit_flag` -- submit the flag
+
+## Multi-Agent Orchestration
+
+See the orchestration strategy documented in [CLAUDE.md](../CLAUDE.md), which
+covers:
+- Priority-based challenge queue
+- Model selection per challenge type
+- Subagent prompt patterns
+- Flag detection and auto-submission rules

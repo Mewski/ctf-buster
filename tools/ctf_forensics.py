@@ -39,21 +39,17 @@ def file_triage(path: str) -> str:
 
     result = {"path": path, "size": os.path.getsize(path)}
 
-    # file type
     r = run_tool(["file", "-b", path])
     result["file_type"] = r["stdout"].strip()
 
-    # MIME type
     r = run_tool(["file", "-b", "--mime-type", path])
     result["mime_type"] = r["stdout"].strip()
 
-    # exiftool metadata
     r = run_tool(["exiftool", "-j", path])
     if r["returncode"] == 0:
         try:
             meta = json.loads(r["stdout"])
             if meta and isinstance(meta, list):
-                # Filter to interesting fields
                 m = meta[0]
                 interesting_keys = {
                     "Comment",
@@ -84,7 +80,6 @@ def file_triage(path: str) -> str:
                 result["metadata"] = {
                     k: v for k, v in m.items() if k in interesting_keys
                 }
-                # Also include anything with "flag", "ctf", "hidden", "secret"
                 for k, v in m.items():
                     v_str = str(v).lower()
                     if any(
@@ -95,7 +90,6 @@ def file_triage(path: str) -> str:
         except json.JSONDecodeError:
             pass
 
-    # binwalk scan (signatures only, no extraction)
     r = run_tool(["binwalk", "--quiet", path])
     if r["returncode"] == 0:
         embedded = []
@@ -114,7 +108,6 @@ def file_triage(path: str) -> str:
                 )
         result["embedded_signatures"] = embedded
 
-    # interesting strings
     r = run_tool(["strings", "-n", "6", path])
     if r["returncode"] == 0:
         all_strings = r["stdout"].splitlines()
@@ -127,7 +120,6 @@ def file_triage(path: str) -> str:
         ][:50]
         result["strings_total"] = len(all_strings)
 
-    # Overall entropy
     try:
         data = safe_read_file(path, max_size=50_000_000)
         result["entropy"] = round(_calculate_entropy(data), 4)
@@ -135,7 +127,6 @@ def file_triage(path: str) -> str:
     except Exception:
         pass
 
-    # Check for data after EOF marker (appended data)
     result["trailing_data"] = _check_trailing_data(path, result.get("mime_type", ""))
 
     return json.dumps(result, indent=2)

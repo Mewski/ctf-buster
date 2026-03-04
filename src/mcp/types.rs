@@ -50,3 +50,21 @@ pub struct SyncParams {
   )]
   pub full: Option<bool>,
 }
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct QueueUpdateParams {
+  #[schemars(
+    description = "Action: 'set_queue' (replace queue), 'start' (mark challenge in-progress), 'complete' (remove from in-progress), 'fail' (record failure), 'clear' (reset all)"
+  )]
+  pub action: String,
+  #[schemars(description = "Challenge name (for start/complete/fail actions)")]
+  pub challenge: Option<String>,
+  #[schemars(description = "Challenge category (for fail action)")]
+  pub category: Option<String>,
+  #[schemars(description = "Failure notes (for fail action)")]
+  pub notes: Option<String>,
+  #[schemars(
+    description = "Full queue replacement as JSON array of {name, category, priority, points} objects (for set_queue action)"
+  )]
+  pub queue_json: Option<String>,
+}

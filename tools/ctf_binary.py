@@ -46,16 +46,13 @@ def _binary_triage_impl(path: str) -> str:
 
     result = {"path": path}
 
-    # file type
     r = run_tool(["file", "-b", path])
     result["file_type"] = r["stdout"].strip()
 
-    # checksec
     r = run_tool(["checksec", "--file=" + path])
     output = r["stdout"] + r["stderr"]
     result["checksec"] = parse_checksec(output)
 
-    # rabin2 info
     r = run_tool(["rabin2", "-I", path])
     if r["returncode"] == 0:
         info = {}
@@ -71,7 +68,6 @@ def _binary_triage_impl(path: str) -> str:
         result["os"] = info.get("os", "unknown")
         result["bintype"] = info.get("bintype", "unknown")
 
-    # imports
     r = run_tool(["rabin2", "-i", "-j", path])
     if r["returncode"] == 0:
         try:
@@ -82,7 +78,6 @@ def _binary_triage_impl(path: str) -> str:
         except json.JSONDecodeError:
             result["imports"] = []
 
-    # exports / symbols
     r = run_tool(["rabin2", "-E", "-j", path])
     if r["returncode"] == 0:
         try:
@@ -93,7 +88,6 @@ def _binary_triage_impl(path: str) -> str:
         except json.JSONDecodeError:
             result["exports"] = []
 
-    # sections
     r = run_tool(["rabin2", "-S", "-j", path])
     if r["returncode"] == 0:
         try:
@@ -109,7 +103,6 @@ def _binary_triage_impl(path: str) -> str:
         except json.JSONDecodeError:
             result["sections"] = []
 
-    # interesting strings
     r = run_tool(["rabin2", "-z", "-j", path])
     if r["returncode"] == 0:
         try:

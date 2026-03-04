@@ -206,7 +206,7 @@ impl McpServer {
         let platform = platform.clone();
         async move { platform.challenge(&id).await }
       }))
-      .buffer_unordered(5)
+      .buffer_unordered(5) // Limit concurrent API requests
       .filter_map(|r| async { r.ok() })
       .collect()
       .await;
@@ -404,6 +404,79 @@ impl McpServer {
       .await
       .map_err(to_mcp_error)?;
     let json = serde_json::to_string_pretty(&hint).map_err(to_mcp_error)?;
+    Ok(CallToolResult::success(vec![Content::text(json)]))
+  }
+
+  #[tool(
+    description = "Get the challenge priority queue — shows what to solve next, what's in progress, and what failed. Persists across agent restarts."
+  )]
+  async fn ctf_queue_status(&self) -> Result<CallToolResult, McpError> {
+    let orch = state::load_orchestration(&self.workspace_root).map_err(to_mcp_error)?;
+    let json = serde_json::to_string_pretty(&orch).map_err(to_mcp_error)?;
+    Ok(CallToolResult::success(vec![Content::text(json)]))
+  }
+
+  #[tool(
+    description = "Update the challenge queue — set priorities, mark challenges as in-progress or failed. Persists across agent restarts."
+  )]
+  async fn ctf_queue_update(
+    &self,
+    Parameters(params): Parameters<QueueUpdateParams>,
+  ) -> Result<CallToolResult, McpError> {
+    let mut orch = state::load_orchestration(&self.workspace_root).map_err(to_mcp_error)?;
+
+    match params.action.as_str() {
+      "set_queue" => {
+        let json_str = params
+          .queue_json
+          .ok_or_else(|| McpError::invalid_params("queue_json required for set_queue", None))?;
+        let queue: Vec<state::QueuedChallenge> =
+          serde_json::from_str(&json_str).map_err(to_mcp_error)?;
+        orch.queue = queue;
+      }
+      "start" => {
+        let name = params
+          .challenge
+          .ok_or_else(|| McpError::invalid_params("challenge required for start", None))?;
+        orch.queue.retain(|q| q.name != name);
+        if !orch.in_progress.contains(&name) {
+          orch.in_progress.push(name);
+        }
+      }
+      "complete" => {
+        let name = params
+          .challenge
+          .ok_or_else(|| McpError::invalid_params("challenge required for complete", None))?;
+        orch.in_progress.retain(|n| n != &name);
+      }
+      "fail" => {
+        let name = params
+          .challenge
+          .ok_or_else(|| McpError::invalid_params("challenge required for fail", None))?;
+        orch.in_progress.retain(|n| n != &name);
+        orch.failed.push(state::FailedAttempt {
+          name,
+          category: params.category.unwrap_or_default(),
+          attempted_at: chrono::Utc::now(),
+          notes: params.notes.unwrap_or_else(|| "failed".to_string()),
+        });
+      }
+      "clear" => {
+        orch = state::OrchestrationState::default();
+      }
+      other => {
+        return Err(McpError::invalid_params(
+          format!("Unknown action: {other}. Use set_queue, start, complete, fail, or clear."),
+          None,
+        ));
+      }
+    }
+
+    orch.updated_at = Some(chrono::Utc::now());
+    state::update_orchestration(&self.workspace_root, orch).map_err(to_mcp_error)?;
+
+    let updated = state::load_orchestration(&self.workspace_root).map_err(to_mcp_error)?;
+    let json = serde_json::to_string_pretty(&updated).map_err(to_mcp_error)?;
     Ok(CallToolResult::success(vec![Content::text(json)]))
   }
 
