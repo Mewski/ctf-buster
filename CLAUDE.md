@@ -1,11 +1,11 @@
 # CTF-Buster
 
-AI-powered CTF competition toolkit. Rust CLI + 6 MCP servers (42 tools total).
+AI-powered CTF competition toolkit. Rust CLI + 6 MCP servers (44 tools total).
 
 ## Architecture
 
 ```
-ctf-buster (Rust)      — 12 tools: platform interaction (CTFd/rCTF), queue management, writeups
+ctf-buster (Rust)      — 14 tools: platform interaction (CTFd/rCTF), queue management, auto-orchestration, writeups
 ctf-crypto (Python)    — 6 tools: encoding chains, RSA attacks, constraint solving
 ctf-binary (Python)    — 8 tools: triage, disassembly, ROP, pwntools, angr
 ctf-forensics (Python) — 5 tools: file analysis, stego, extraction, entropy
@@ -30,7 +30,8 @@ ctf_notifications()          # Check for announcements, errata, format changes
 
 ### 2. Challenge Priority Queue
 
-Score and sort unsolved challenges before launching subagents:
+**Automated:** Call `ctf_auto_queue()` to automatically score and queue all unsolved challenges.
+It implements this scoring algorithm:
 
 ```
 priority = category_score + difficulty_bonus + solve_bonus
@@ -44,12 +45,15 @@ category_score (tool coverage strength):
   pwn:        +2   (often needs interactive exploitation beyond tool scope)
 
 difficulty_bonus:
-  "easy" tag or > 50 solves:  +20
-  "medium" tag or 20-50 solves: +10
-  "hard" tag or < 20 solves:  +0
+  > 50 solves:  +20
+  20-50 solves: +10
+  < 20 solves:  +0
 
 solve_bonus:
   points / solves < 10:  +5  (likely easy, high value)
+
+failure_penalty:
+  previously failed: -10
 ```
 
 Queue rules:
@@ -62,29 +66,34 @@ Queue rules:
 ### 3. Orchestration Loop
 
 The main agent acts as an **orchestrator** — it does NOT solve challenges directly.
-Instead it launches subagents and monitors progress:
+Instead it uses two automation tools and launches subagents:
 
 ```
 while unsolved challenges remain:
-  1. ctf_challenges(unsolved=true)         # Get current unsolved list
-  2. Score and sort by priority queue above
-  3. Take top N (N = parallel capacity, typically 3-5)
-  4. Group by category for context sharing
-  5. Select model per challenge (see Model Selection below)
-  6. Launch subagents (Task tool) for the batch
-  7. Collect results, submit any found flags
-  8. Re-queue failures with reduced priority
-  9. ctf_sync()                            # Catch team solves, new challenges
-  10. ctf_workspace_status()               # Check updated score/progress
+  1. ctf_sync(full=true)                   # Fetch challenges + descriptions + files
+  2. ctf_auto_queue()                      # Auto-score and queue all unsolved
+  3. ctf_generate_solve_prompt(count=N)    # Get prompts for top N (typically 3-5)
+  4. Launch subagents (Task tool) in parallel using the generated prompts
+     — each prompt includes: challenge info, model recommendation, tool hints, steps
+  5. Collect results from subagents
+  6. For any failures: ctf_queue_update(action='fail', challenge='...', notes='...')
+  7. Loop back to step 1 (re-sync catches team solves, new challenges)
 ```
 
+**One-command start:** When asked to "solve this CTF" or "start solving", execute steps
+1-4 immediately without asking for confirmation. The tools handle all scoring, prompt
+generation, and model selection automatically.
+
 Key orchestration rules:
-- **Always check `ctf_challenges(unsolved=true)` before launching new agents** — avoids
-  re-attempting challenges already solved by another subagent
+- **Always re-sync before each batch** — `ctf_sync()` catches solves from other subagents
+  and teammates, preventing duplicate work
+- **Use `ctf_generate_solve_prompt`** — it generates complete, self-contained prompts with
+  descriptions, file lists, hints, tool suggestions, model recommendations, and step-by-step
+  instructions. No need to manually construct prompts.
 - **State is shared** — `ctf_submit_flag` writes to `.ctf-state.json` which tracks every
-  solve with timestamp, flag, and points. `ctf_workspace_status` reads this.
-- **Re-sync periodically** — `ctf_sync()` updates local state from the platform, catching
-  solves from other team members too
+  solve with timestamp, flag, and points. `ctf_auto_queue` reads this to skip solved ones.
+- **Parallel launches** — call multiple Task tools in a single message to launch subagents
+  concurrently. Use `recommended_model` from the prompt generator for each.
 
 ### 4. Model Selection for Subagents
 
@@ -113,35 +122,31 @@ Select the model based on challenge characteristics:
 
 ### 5. Subagent Structure
 
-Each subagent receives a specific challenge (or small batch) to solve:
+**Automated:** Call `ctf_generate_solve_prompt(count=N)` to get ready-to-use prompts.
+Each prompt includes challenge info, tool suggestions, model recommendation, and the
+full step sequence. Just pass them directly to the Task tool.
 
 ```
-Subagent prompt pattern:
-  "Solve CTF challenge '{name}' (category: {category}, {points} pts).
-   Description: {description}
-   Files: {file_list}
-   Workspace: {workspace_path}
-   Flag format: {flag_format}
+# Generate prompts for top 3 challenges
+result = ctf_generate_solve_prompt(count=3)
 
-   Steps:
-   1. Download files with ctf_download_files('{name}')
-   2. Triage with {appropriate_triage_tool}
-   3. Analyze and solve
-   4. AUTO-SUBMIT: As soon as you find ANYTHING matching the flag format
-      (e.g. flag{...}, CTF{...}, or the competition's format), immediately
-      call ctf_submit_flag('{name}', '<the_flag>') — do NOT wait, do NOT
-      ask for confirmation, do NOT continue analysis before submitting.
-   5. If the flag is correct, report back as solved.
-      If incorrect, continue analysis and try other candidates.
-   6. After a correct flag submission, call ctf_save_writeup('{name}',
-      methodology='<how you solved it>', tools_used=['<tools>']) to
-      document the solution for the team.
-   7. Report back: solved/unsolved/needs-help"
-
-Launch subagent with:
-  model: select based on category + difficulty (see Model Selection)
-  subagent_type: "general-purpose"
+# Launch each as a subagent
+for prompt_data in result.prompts:
+  Task(
+    description="Solve " + prompt_data.challenge,
+    prompt=prompt_data.prompt,
+    model=prompt_data.recommended_model,
+    subagent_type="general-purpose"
+  )
 ```
+
+The generated prompts follow this structure:
+1. Download files with ctf_download_files
+2. Triage with category-appropriate tools
+3. Analyze and solve
+4. AUTO-SUBMIT any flag-like strings immediately
+5. On correct flag, call ctf_save_writeup to document methodology
+6. Report back: solved/unsolved/needs-help
 
 **Flag detection rules for subagents:**
 - Scan ALL tool output (stdout, extracted data, decoded text, solver results) for flag patterns

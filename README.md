@@ -12,7 +12,7 @@ workspace.
   track scores on CTFd and rCTF with automatic platform detection.
 - **Workspace management** -- initialize per-competition workspaces with
   scaffolded directories, solve templates, and notes files.
-- **6 MCP servers / 42 tools** -- expose every capability over MCP so AI agents
+- **6 MCP servers / 44 tools** -- expose every capability over MCP so AI agents
   can call them directly.
 - **TUI dashboard** -- run `ctf dashboard` in a separate terminal to monitor
   progress in real-time while the AI orchestrator works.
@@ -31,7 +31,7 @@ workspace.
     |        |        |                   |         |        |
 ctf-buster ctf-crypto ctf-binary  ctf-forensics  ctf-gdb  ctf-re
   (Rust)   (Python)   (Python)     (Python)     (Python) (Python)
- 11 tools  6 tools    8 tools      5 tools      5 tools  6 tools
+ 14 tools  6 tools    8 tools      5 tools      5 tools  6 tools
     |          |          |            |            |        |
  CTFd/rCTF  sympy,z3  radare2,pwn  binwalk,    GDB      radare2
  platforms  crypto    ROPgadget    zsteg,PIL   batch     r2ghidra
@@ -74,7 +74,7 @@ ctf submit "challenge-name" "flag{...}"
 |----------|-------------|
 | [Architecture](docs/architecture.md) | System design, module structure, platform abstraction |
 | [CLI Reference](docs/cli-reference.md) | All CLI commands with examples |
-| [MCP Tools](docs/mcp-tools.md) | All 42 tools across 6 MCP servers |
+| [MCP Tools](docs/mcp-tools.md) | All 44 tools across 6 MCP servers |
 | [Configuration](docs/configuration.md) | `.ctf.toml`, authentication, scaffold templates |
 | [Integration](docs/integration.md) | Claude Code setup and `.mcp.json` |
 | [Security Tools](docs/security-tools.md) | 160+ tools available in the Nix dev shell |

@@ -70,6 +70,26 @@ pub struct QueueUpdateParams {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AutoQueueParams {
+  #[schemars(
+    description = "Override the default parallel capacity (how many challenges to include). Defaults to all unsolved challenges, sorted by priority."
+  )]
+  pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SolvePromptParams {
+  #[schemars(
+    description = "Number of challenges to generate prompts for (takes from top of queue). Defaults to 1."
+  )]
+  pub count: Option<usize>,
+  #[schemars(
+    description = "Specific challenge name to generate a prompt for (ignores queue order)"
+  )]
+  pub challenge: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct WriteupParams {
   #[schemars(description = "Challenge name (must already exist in state — submit the flag first)")]
   pub challenge: String,

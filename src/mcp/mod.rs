@@ -496,6 +496,246 @@ impl McpServer {
   }
 
   #[tool(
+    description = "Auto-score and queue all unsolved challenges by priority. Implements the scoring algorithm: category_score (crypto/forensics +10, web +8, rev +6, misc +4, pwn +2) + difficulty_bonus (>50 solves: +20, 20-50: +10, <20: +0) + solve_bonus (points/solves < 10: +5). Replaces the current queue. Call this after ctf_sync to automatically prioritize what to solve next."
+  )]
+  async fn ctf_auto_queue(
+    &self,
+    Parameters(params): Parameters<AutoQueueParams>,
+  ) -> Result<CallToolResult, McpError> {
+    // Get current challenges from platform
+    let challenges = self.platform.challenges().await.map_err(to_mcp_error)?;
+
+    // Merge cached details for solve count info
+    let mut challenges = challenges;
+    if let Ok(ws_state) = state::load_state(&self.workspace_root) {
+      state::merge_cached_details(&mut challenges, &ws_state);
+    }
+
+    // Filter to unsolved only
+    let unsolved: Vec<_> = challenges.iter().filter(|c| !c.solved_by_me).collect();
+
+    // Also check what's already failed to deprioritize
+    let orch = state::load_orchestration(&self.workspace_root).map_err(to_mcp_error)?;
+    let failed_names: std::collections::HashSet<String> = orch
+      .failed
+      .iter()
+      .map(|f| f.name.to_lowercase())
+      .collect();
+
+    // Score each challenge
+    let mut scored: Vec<state::QueuedChallenge> = unsolved
+      .iter()
+      .map(|c| {
+        let cat = c.category.to_lowercase();
+        let category_score: i32 = match cat.as_str() {
+          "crypto" | "cryptography" => 10,
+          "forensics" | "forensic" => 10,
+          "web" | "web exploitation" => 8,
+          "rev" | "reverse" | "reverse engineering" | "reversing" => 6,
+          "misc" | "miscellaneous" | "trivia" => 4,
+          "pwn" | "binary exploitation" | "exploitation" | "pwnable" => 2,
+          _ => 4, // default to misc-level
+        };
+
+        let difficulty_bonus: i32 = if c.solves > 50 {
+          20
+        } else if c.solves >= 20 {
+          10
+        } else {
+          0
+        };
+
+        let solve_bonus: i32 = if c.solves > 0 && (c.value as f64 / c.solves as f64) < 10.0 {
+          5
+        } else {
+          0
+        };
+
+        let mut priority = category_score + difficulty_bonus + solve_bonus;
+
+        // Deprioritize previously failed challenges
+        if failed_names.contains(&c.name.to_lowercase()) {
+          priority -= 10;
+        }
+
+        state::QueuedChallenge {
+          name: c.name.clone(),
+          category: c.category.clone(),
+          priority,
+          points: c.value,
+        }
+      })
+      .collect();
+
+    // Sort by priority descending, then by points descending as tiebreaker
+    scored.sort_by(|a, b| b.priority.cmp(&a.priority).then(b.points.cmp(&a.points)));
+
+    // Apply limit if specified
+    if let Some(limit) = params.limit {
+      scored.truncate(limit);
+    }
+
+    let queue_len = scored.len();
+
+    // Save to orchestration state
+    let mut orch = state::load_orchestration(&self.workspace_root).map_err(to_mcp_error)?;
+    orch.queue = scored;
+    orch.updated_at = Some(chrono::Utc::now());
+    state::update_orchestration(&self.workspace_root, orch).map_err(to_mcp_error)?;
+
+    // Return the queue as JSON
+    let updated = state::load_orchestration(&self.workspace_root).map_err(to_mcp_error)?;
+    let json = serde_json::to_string_pretty(&updated).map_err(to_mcp_error)?;
+
+    Ok(CallToolResult::success(vec![Content::text(format!(
+      "Auto-queued {queue_len} unsolved challenges by priority.\n\n{json}"
+    ))]))
+  }
+
+  #[tool(
+    description = "Generate ready-to-use subagent prompts for solving challenges. Takes from the top of the queue (or a specific challenge). Returns structured JSON with: challenge info, recommended model, full prompt text, and tool suggestions. Use this to launch subagents via the Task tool."
+  )]
+  async fn ctf_generate_solve_prompt(
+    &self,
+    Parameters(params): Parameters<SolvePromptParams>,
+  ) -> Result<CallToolResult, McpError> {
+    let ws_state = state::load_state(&self.workspace_root).map_err(to_mcp_error)?;
+    let orch = state::load_orchestration(&self.workspace_root).map_err(to_mcp_error)?;
+
+    // Determine which challenges to generate prompts for
+    let targets: Vec<&state::QueuedChallenge> = if let Some(ref name) = params.challenge {
+      // Specific challenge requested
+      let name_lower = name.to_lowercase();
+      let found = orch.queue.iter().find(|q| q.name.to_lowercase() == name_lower);
+      if let Some(q) = found {
+        vec![q]
+      } else {
+        // Not in queue — check if it exists in state at all
+        if ws_state.challenges.contains_key(&name_lower) {
+          return Err(McpError::invalid_params(
+            format!("Challenge '{}' exists but is not in the queue. Run ctf_auto_queue first, or it may already be solved.", name),
+            None,
+          ));
+        }
+        return Err(McpError::invalid_params(
+          format!("Challenge '{}' not found. Run ctf_sync and ctf_auto_queue first.", name),
+          None,
+        ));
+      }
+    } else {
+      let count = params.count.unwrap_or(1);
+      orch.queue.iter().take(count).collect()
+    };
+
+    if targets.is_empty() {
+      return Ok(CallToolResult::success(vec![Content::text(
+        "Queue is empty. Run ctf_auto_queue to populate it.",
+      )]));
+    }
+
+    // Generate prompts
+    let mut prompts = Vec::new();
+    for target in &targets {
+      let cached = ws_state.challenges.get(&target.name.to_lowercase());
+      let description = cached
+        .and_then(|c| c.description.as_deref())
+        .unwrap_or("(no description cached — run ctf_sync with full=true)");
+      let files: Vec<String> = cached
+        .and_then(|c| c.files.as_ref())
+        .map(|f| f.iter().map(|ff| ff.name.clone()).collect())
+        .unwrap_or_default();
+      let hints: Vec<String> = cached
+        .and_then(|c| c.hints.as_ref())
+        .map(|h| {
+          h.iter()
+            .filter_map(|hh| hh.content.clone())
+            .collect()
+        })
+        .unwrap_or_default();
+
+      // Determine recommended model
+      let cat_lower = target.category.to_lowercase();
+      let is_retry = orch.failed.iter().any(|f| f.name.to_lowercase() == target.name.to_lowercase());
+      let recommended_model = if is_retry || target.points > 300 {
+        "opus"
+      } else {
+        "sonnet"
+      };
+
+      // Category-specific tool suggestions
+      let tool_hints = match cat_lower.as_str() {
+        "crypto" | "cryptography" => "Use crypto_identify, transform_chain, rsa_toolkit, math_solve. Start with crypto_identify to detect encoding/cipher type.",
+        "forensics" | "forensic" => "Use file_triage, stego_analyze, extract_embedded, entropy_analysis. Start with file_triage.",
+        "web" | "web exploitation" => "Use curl, sqlmap, ffuf from bash. Check source code, headers, cookies, robots.txt.",
+        "rev" | "reverse" | "reverse engineering" | "reversing" => "Use r2_functions, r2_decompile, r2_xrefs, r2_strings_xrefs. Start with r2_functions for an overview, then decompile key functions.",
+        "pwn" | "binary exploitation" | "exploitation" | "pwnable" => "Use binary_triage first, then gdb_break_inspect, gdb_trace_input, angr_analyze. Check for buffer overflows, format strings, use-after-free.",
+        _ => "Use file_triage on any downloaded files, then choose tools based on content type.",
+      };
+
+      let files_str = if files.is_empty() {
+        "None attached".to_string()
+      } else {
+        files.join(", ")
+      };
+
+      let hints_str = if hints.is_empty() {
+        String::new()
+      } else {
+        format!("\n   Hints: {}", hints.join("; "))
+      };
+
+      let prompt = format!(
+        "Solve CTF challenge '{name}' (category: {cat}, {pts} pts).\n\
+         Description: {desc}\n\
+         Files: {files}{hints}\n\
+         Workspace: {workspace_root}\n\
+         \n\
+         Tool suggestions: {tool_hints}\n\
+         \n\
+         Steps:\n\
+         1. Download files with ctf_download_files('{name}')\n\
+         2. Triage with the appropriate tool for {cat} challenges\n\
+         3. Analyze and solve using the MCP tools available\n\
+         4. AUTO-SUBMIT: As soon as you find ANYTHING matching a flag format \
+            (e.g. flag{{...}}, CTF{{...}}), immediately call \
+            ctf_submit_flag('{name}', '<the_flag>') — do NOT wait or ask.\n\
+         5. If correct, report solved. If incorrect, continue analysis.\n\
+         6. After a correct flag, call ctf_save_writeup('{name}', \
+            methodology='<how you solved it>', tools_used=['<tools>'])\n\
+         7. Report back: solved/unsolved/needs-help",
+        name = target.name,
+        cat = target.category,
+        pts = target.points,
+        desc = description,
+        files = files_str,
+        hints = hints_str,
+        workspace_root = self.workspace_root.display(),
+        tool_hints = tool_hints,
+      );
+
+      prompts.push(serde_json::json!({
+        "challenge": target.name,
+        "category": target.category,
+        "points": target.points,
+        "priority": target.priority,
+        "recommended_model": recommended_model,
+        "subagent_type": "general-purpose",
+        "is_retry": is_retry,
+        "prompt": prompt,
+      }));
+    }
+
+    let result = serde_json::json!({
+      "count": prompts.len(),
+      "prompts": prompts,
+      "usage": "For each prompt, launch a subagent: Task(description='Solve <name>', prompt=prompt, model=recommended_model, subagent_type='general-purpose'). Launch multiple in parallel for maximum throughput.",
+    });
+
+    let json = serde_json::to_string_pretty(&result).map_err(to_mcp_error)?;
+    Ok(CallToolResult::success(vec![Content::text(json)]))
+  }
+
+  #[tool(
     description = "Save a writeup for a solved challenge — records methodology and tools used, generates writeup.md in the challenge directory. Call this AFTER successfully submitting a flag."
   )]
   async fn ctf_save_writeup(
