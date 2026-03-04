@@ -118,14 +118,33 @@ def rev_xrefs(path: str, target: str, direction: str = "both") -> str:
     xrefs_to = []
     xrefs_from = []
 
-    if direction in ("to", "both"):
+    if direction == "both":
+        # Single r2 invocation for both directions
+        result = _r2_cmd(
+            path,
+            ["aaa", f"s {seek}", "echo ===TO===", "axtj", "echo ===FROM===", "axfj"],
+        )
+        if result["returncode"] == 0:
+            output = result["stdout"]
+            if "===TO===" in output:
+                to_section = output.split("===TO===", 1)[1]
+                if "===FROM===" in to_section:
+                    to_section = to_section.split("===FROM===", 1)[0]
+                parsed = _parse_r2_json(to_section.strip())
+                if parsed:
+                    xrefs_to = parsed
+            if "===FROM===" in output:
+                from_section = output.split("===FROM===", 1)[1]
+                parsed = _parse_r2_json(from_section.strip())
+                if parsed:
+                    xrefs_from = parsed
+    elif direction == "to":
         result = _r2_cmd(path, ["aaa", f"s {seek}", "axtj"])
         if result["returncode"] == 0:
             parsed = _parse_r2_json(result["stdout"])
             if parsed:
                 xrefs_to = parsed
-
-    if direction in ("from", "both"):
+    elif direction == "from":
         result = _r2_cmd(path, ["aaa", f"s {seek}", "axfj"])
         if result["returncode"] == 0:
             parsed = _parse_r2_json(result["stdout"])
@@ -196,32 +215,36 @@ def rev_decompile(path: str, function: str = "main", decompiler: str = "auto") -
         decompilers = [("disasm", "pdf")]
 
     for name, cmd in decompilers:
-        result = _r2_cmd(path, ["aaa", f"s {seek}", cmd], timeout=120)
+        # Combine address lookup and decompile in a single r2 invocation
+        result = _r2_cmd(
+            path,
+            ["aaa", f"s {seek}", "echo ===ADDR===", "?v $$", f"echo ===CODE===", cmd],
+            timeout=120,
+        )
 
         output = result["stdout"].strip()
-        if (
-            result["returncode"] == 0
-            and output
-            and "Cannot" not in output
-            and len(output) > 20
-        ):
-            addr_result = _r2_cmd(path, ["aaa", f"s {seek}", "?v $$"])
-            address = (
-                addr_result["stdout"].strip()
-                if addr_result["returncode"] == 0
-                else "unknown"
-            )
+        if result["returncode"] == 0 and output and "Cannot" not in output:
+            # Parse address and code from combined output
+            address = "unknown"
+            code = output
+            if "===ADDR===" in output and "===CODE===" in output:
+                parts = output.split("===CODE===", 1)
+                addr_section = parts[0].split("===ADDR===", 1)
+                if len(addr_section) > 1:
+                    address = addr_section[1].strip()
+                code = parts[1].strip() if len(parts) > 1 else ""
 
-            return json.dumps(
-                {
-                    "path": path,
-                    "function": function,
-                    "address": address,
-                    "decompiler": name,
-                    "code": output[:5000],
-                },
-                indent=2,
-            )
+            if code and len(code) > 20:
+                return json.dumps(
+                    {
+                        "path": path,
+                        "function": function,
+                        "address": address,
+                        "decompiler": name,
+                        "code": code[:5000],
+                    },
+                    indent=2,
+                )
 
     return json.dumps(
         {
@@ -258,14 +281,47 @@ def rev_strings_xrefs(path: str, filter: str = "") -> str:
 
     filter_re = re.compile(filter, re.IGNORECASE) if filter else None
 
-    strings = []
+    # Filter strings first, then batch xref lookups in a single r2 invocation
+    filtered = []
     for s in strings_raw:
         string_val = s.get("string", "")
         if filter_re and not filter_re.search(string_val):
             continue
         if not filter_re and len(string_val) < 4:
             continue
+        filtered.append(s)
+        if len(filtered) >= 100:
+            break
 
+    # Build a single r2 command that seeks to each string and gets xrefs
+    xref_cmds = ["aaa"]
+    for s in filtered:
+        addr = s.get("vaddr", s.get("paddr", 0))
+        xref_cmds.append(f"echo ===XREF_{addr}===")
+        xref_cmds.append(f"s {addr}")
+        xref_cmds.append("axtj")
+
+    xref_result = _r2_cmd(path, xref_cmds, timeout=120) if filtered else None
+    xref_output = xref_result["stdout"] if xref_result else ""
+
+    # Parse batched xref results
+    xref_map = {}
+    for s in filtered:
+        addr = s.get("vaddr", s.get("paddr", 0))
+        marker = f"===XREF_{addr}==="
+        if marker in xref_output:
+            section = xref_output.split(marker, 1)[1]
+            # Take content until next marker or end
+            next_marker = section.find("===XREF_")
+            if next_marker >= 0:
+                section = section[:next_marker]
+            parsed = _parse_r2_json(section.strip())
+            if parsed:
+                xref_map[addr] = parsed
+
+    strings = []
+    for s in filtered:
+        string_val = s.get("string", "")
         addr = s.get("vaddr", s.get("paddr", 0))
         entry = {
             "string": string_val,
@@ -275,22 +331,18 @@ def rev_strings_xrefs(path: str, filter: str = "") -> str:
             "size": s.get("size", 0),
         }
 
-        xref_result = _r2_cmd(path, ["aaa", f"s {addr}", "axtj"])
-        if xref_result["returncode"] == 0:
-            xrefs = _parse_r2_json(xref_result["stdout"])
-            if xrefs:
-                entry["referenced_by"] = [
-                    {
-                        "function": x.get("fcn_name", ""),
-                        "address": hex(x.get("from", 0)),
-                        "opcode": x.get("opcode", ""),
-                    }
-                    for x in xrefs
-                ]
+        xrefs = xref_map.get(addr)
+        if xrefs:
+            entry["referenced_by"] = [
+                {
+                    "function": x.get("fcn_name", ""),
+                    "address": hex(x.get("from", 0)),
+                    "opcode": x.get("opcode", ""),
+                }
+                for x in xrefs
+            ]
 
         strings.append(entry)
-        if len(strings) >= 100:
-            break
 
     return json.dumps(
         {

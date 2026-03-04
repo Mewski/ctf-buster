@@ -92,6 +92,8 @@ def _apply_op(data: str, op: str) -> str:
         return data.encode().hex()
     elif op == "hex_decode":
         clean = data.replace(" ", "").replace("0x", "").replace("\\x", "")
+        if len(clean) % 2 != 0:
+            clean = "0" + clean
         return bytes.fromhex(clean).decode("utf-8", errors="replace")
     elif op == "url_encode":
         return urllib.parse.quote(data)

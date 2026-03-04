@@ -163,8 +163,10 @@ def _check_trailing_data(path, mime_type):
                     }
         elif "zip" in mime_type:
             eocd = data.rfind(b"\x50\x4b\x05\x06")
-            if eocd >= 0:
-                end_pos = eocd + 22  # minimum EOCD size
+            if eocd >= 0 and eocd + 22 <= len(data):
+                # Read the comment length field (2 bytes at offset 20 in EOCD)
+                comment_len = int.from_bytes(data[eocd + 20 : eocd + 22], "little")
+                end_pos = eocd + 22 + comment_len
                 if end_pos < len(data):
                     return {
                         "found": True,
