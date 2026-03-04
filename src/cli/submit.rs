@@ -19,8 +19,7 @@ pub async fn handle_submit(
 ) -> Result<()> {
   let (challenge_id, flag) = if let Some(flag) = second {
     // Two args: first is challenge id/name, second is flag
-    let challenge =
-      crate::cli::challenge::resolve_challenge(platform, first, challenges).await?;
+    let challenge = crate::cli::challenge::resolve_challenge(platform, first, challenges).await?;
     (challenge.id, flag.to_string())
   } else {
     // One arg: flag only, infer challenge from cwd
@@ -42,13 +41,7 @@ pub async fn handle_submit(
   // Update local state on success
   if let SubmitResult::Correct { challenge, points } = &result {
     if config::load_workspace_config(workspace_root).is_ok() {
-      if let Err(e) = state::mark_solved(
-        workspace_root,
-        &challenge_id,
-        challenge,
-        *points,
-        &flag,
-      ) {
+      if let Err(e) = state::mark_solved(workspace_root, &challenge_id, challenge, *points, &flag) {
         eprintln!("Warning: failed to update local state: {e}");
       }
     }
@@ -57,10 +50,7 @@ pub async fn handle_submit(
   Ok(())
 }
 
-fn infer_challenge_from_cwd<'a>(
-  challenges: &'a [Challenge],
-  workspace_root: &Path,
-) -> Result<&'a Challenge> {
+fn infer_challenge_from_cwd<'a>(challenges: &'a [Challenge], workspace_root: &Path) -> Result<&'a Challenge> {
   let cwd = std::env::current_dir()?;
   let relative = cwd
     .strip_prefix(workspace_root)
@@ -79,9 +69,7 @@ fn infer_challenge_from_cwd<'a>(
     .find(|c| c.name.to_lowercase() == lower)
     .or_else(|| {
       // Try matching by directory name containing the challenge name
-      challenges
-        .iter()
-        .find(|c| c.name.to_lowercase().contains(&lower) || lower.contains(&c.name.to_lowercase()))
+      challenges.iter().find(|c| c.name.to_lowercase().contains(&lower) || lower.contains(&c.name.to_lowercase()))
     })
     .ok_or_else(|| {
       Error::ChallengeNotFound(format!(
@@ -93,12 +81,7 @@ fn infer_challenge_from_cwd<'a>(
 fn print_submit_result(result: &SubmitResult) {
   match result {
     SubmitResult::Correct { challenge, points } => {
-      println!(
-        "{} {} ({} pts)",
-        "✓ Correct!".green().bold(),
-        challenge.bold(),
-        points
-      );
+      println!("{} {} ({} pts)", "✓ Correct!".green().bold(), challenge.bold(), points);
     }
     SubmitResult::Incorrect => {
       println!("{}", "✗ Incorrect flag.".red().bold());

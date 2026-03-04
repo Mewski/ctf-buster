@@ -43,23 +43,13 @@ pub fn print_challenges(challenges: &[Challenge]) {
       category: c.category.clone(),
       value: c.value,
       solves: c.solves,
-      status: if c.solved_by_me {
-        "✓".green().to_string()
-      } else {
-        " ".to_string()
-      },
+      status: if c.solved_by_me { "✓".green().to_string() } else { " ".to_string() },
     })
     .collect();
 
-  let table = Table::new(rows)
-    .with(tabled::settings::Style::rounded())
-    .to_string();
+  let table = Table::new(rows).with(tabled::settings::Style::rounded()).to_string();
   println!("{table}");
-  println!(
-    "  {} challenges ({} solved)",
-    challenges.len(),
-    challenges.iter().filter(|c| c.solved_by_me).count()
-  );
+  println!("  {} challenges ({} solved)", challenges.len(), challenges.iter().filter(|c| c.solved_by_me).count());
 }
 
 pub fn print_scoreboard(entries: &[ScoreboardEntry]) {
@@ -68,17 +58,9 @@ pub fn print_scoreboard(entries: &[ScoreboardEntry]) {
     return;
   }
 
-  let rows: Vec<ScoreboardRow> = entries
-    .iter()
-    .map(|e| ScoreboardRow {
-      rank: e.rank,
-      name: e.name.clone(),
-      score: e.score,
-    })
-    .collect();
+  let rows: Vec<ScoreboardRow> =
+    entries.iter().map(|e| ScoreboardRow { rank: e.rank, name: e.name.clone(), score: e.score }).collect();
 
-  let table = Table::new(rows)
-    .with(tabled::settings::Style::rounded())
-    .to_string();
+  let table = Table::new(rows).with(tabled::settings::Style::rounded()).to_string();
   println!("{table}");
 }

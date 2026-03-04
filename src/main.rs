@@ -59,11 +59,7 @@ async fn run(cli: Cli) -> error::Result<()> {
       }
     }
 
-    Command::Init {
-      name,
-      url,
-      platform_type,
-    } => {
+    Command::Init { name, url, platform_type } => {
       cli::workspace::handle_init(&name, url.as_deref(), platform_type.as_deref()).await?;
     }
 
@@ -73,26 +69,12 @@ async fn run(cli: Cli) -> error::Result<()> {
       cli::workspace::handle_sync(&root, full).await?;
     }
 
-    Command::Challenges {
-      category,
-      unsolved,
-      solved,
-    } => {
+    Command::Challenges { category, unsolved, solved } => {
       let (plat, _root) = load_platform().await?;
-      cli::challenge::handle_list(
-        plat.as_ref(),
-        category.as_deref(),
-        unsolved,
-        solved,
-        &cli.output,
-      )
-      .await?;
+      cli::challenge::handle_list(plat.as_ref(), category.as_deref(), unsolved, solved, &cli.output).await?;
     }
 
-    Command::Challenge {
-      id_or_name,
-      download,
-    } => {
+    Command::Challenge { id_or_name, download } => {
       let (plat, root) = load_platform().await?;
       let challenges = plat.challenges().await?;
       cli::challenge::handle_show(plat.as_ref(), &id_or_name, &challenges).await?;
@@ -105,15 +87,7 @@ async fn run(cli: Cli) -> error::Result<()> {
     Command::Submit { first, second } => {
       let (plat, root) = load_platform().await?;
       let challenges = plat.challenges().await?;
-      cli::submit::handle_submit(
-        plat.as_ref(),
-        &first,
-        second.as_deref(),
-        &challenges,
-        &root,
-        &cli.output,
-      )
-      .await?;
+      cli::submit::handle_submit(plat.as_ref(), &first, second.as_deref(), &challenges, &root, &cli.output).await?;
     }
 
     Command::Scoreboard { limit } => {
@@ -162,15 +136,9 @@ async fn run(cli: Cli) -> error::Result<()> {
       let plat: Arc<dyn platform::Platform> = Arc::from(plat);
 
       let server = mcp::McpServer::new(plat, root, ws_config);
-      let service = server
-        .serve(rmcp::transport::stdio())
-        .await
-        .map_err(|e| error::Error::Mcp(e.to_string()))?;
+      let service = server.serve(rmcp::transport::stdio()).await.map_err(|e| error::Error::Mcp(e.to_string()))?;
 
-      service
-        .waiting()
-        .await
-        .map_err(|e| error::Error::Mcp(e.to_string()))?;
+      service.waiting().await.map_err(|e| error::Error::Mcp(e.to_string()))?;
     }
   }
 
@@ -181,11 +149,7 @@ async fn load_platform() -> error::Result<(Box<dyn platform::Platform>, std::pat
   let cwd = std::env::current_dir()?;
   let root = config::find_workspace_root(&cwd).ok_or(error::Error::NotInWorkspace)?;
   let ws_config = config::load_workspace_config(&root)?;
-  let token = cli::auth::get_token_with_config(
-    &ws_config.workspace.name,
-    ws_config.platform.token.as_deref(),
-    None,
-  )?;
+  let token = cli::auth::get_token_with_config(&ws_config.workspace.name, ws_config.platform.token.as_deref(), None)?;
   let plat = platform::create_platform(&ws_config.platform, &token).await?;
   Ok((plat, root))
 }

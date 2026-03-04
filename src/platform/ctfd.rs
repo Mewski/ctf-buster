@@ -42,25 +42,15 @@ impl CtfdPlatform {
     let (auth, client) = if is_session_cookie {
       // Session cookie — build client with cookie jar
       let jar = Arc::new(reqwest::cookie::Jar::default());
-      let url_parsed: url::Url = base_url
-        .parse()
-        .unwrap_or_else(|_| "http://localhost".parse().unwrap());
+      let url_parsed: url::Url = base_url.parse().unwrap_or_else(|_| "http://localhost".parse().unwrap());
       jar.add_cookie_str(&format!("session={token}"), &url_parsed);
-      let client = Client::builder()
-        .cookie_provider(jar)
-        .build()
-        .unwrap_or_default();
+      let client = Client::builder().cookie_provider(jar).build().unwrap_or_default();
       (AuthMethod::Session, client)
     } else {
       (AuthMethod::Token(token), Client::new())
     };
 
-    Self {
-      base_url,
-      auth,
-      client,
-      csrf_nonce: Mutex::new(None),
-    }
+    Self { base_url, auth, client, csrf_nonce: Mutex::new(None) }
   }
 
   /// Fetch CSRF nonce from CTFd (needed for session-based POST requests).
@@ -84,17 +74,11 @@ impl CtfdPlatform {
   }
 
   async fn fetch_csrf_nonce(&self) -> Result<String> {
-    let resp = self
-      .client
-      .get(format!("{}/challenges", self.base_url))
-      .send()
-      .await?;
+    let resp = self.client.get(format!("{}/challenges", self.base_url)).send().await?;
     let status = resp.status();
     let html = resp.text().await?;
     if !status.is_success() {
-      return Err(Error::Platform(format!(
-        "Failed to fetch CSRF nonce (HTTP {status})"
-      )));
+      return Err(Error::Platform(format!("Failed to fetch CSRF nonce (HTTP {status})")));
     }
     html
       .find("csrfNonce")
@@ -119,20 +103,11 @@ impl CtfdPlatform {
       },
     };
 
-    let data = body
-      .get("data")
-      .and_then(|d| d.as_array())
-      .cloned()
-      .unwrap_or_default();
+    let data = body.get("data").and_then(|d| d.as_array()).cloned().unwrap_or_default();
 
     let ids: std::collections::HashSet<String> = data
       .iter()
-      .filter_map(|solve| {
-        solve
-          .get("challenge_id")
-          .and_then(|id| id.as_u64())
-          .map(|id| id.to_string())
-      })
+      .filter_map(|solve| solve.get("challenge_id").and_then(|id| id.as_u64()).map(|id| id.to_string()))
       .collect();
 
     Ok(ids)
@@ -150,10 +125,7 @@ impl CtfdPlatform {
   }
 
   async fn get(&self, path: &str) -> Result<serde_json::Value> {
-    let req = self
-      .client
-      .get(self.api_url(path))
-      .header("Content-Type", "application/json");
+    let req = self.client.get(self.api_url(path)).header("Content-Type", "application/json");
     let resp = self.apply_auth(req).send().await?;
 
     let status = resp.status();
@@ -194,11 +166,7 @@ impl CtfdPlatform {
   }
 
   async fn post_inner(&self, path: &str, payload: &serde_json::Value) -> Result<serde_json::Value> {
-    let mut req = self
-      .client
-      .post(self.api_url(path))
-      .header("Content-Type", "application/json")
-      .json(payload);
+    let mut req = self.client.post(self.api_url(path)).header("Content-Type", "application/json").json(payload);
     req = self.apply_auth(req);
     // Session auth requires CSRF nonce on POST requests
     if matches!(self.auth, AuthMethod::Session) {
@@ -261,12 +229,7 @@ impl From<CtfdChallenge> for Challenge {
         .files
         .into_iter()
         .map(|url| {
-          let name = url
-            .split('/')
-            .next_back()
-            .and_then(|s| s.split('?').next())
-            .unwrap_or("unknown")
-            .to_string();
+          let name = url.split('/').next_back().and_then(|s| s.split('?').next()).unwrap_or("unknown").to_string();
           ChallengeFile { name, url }
         })
         .collect(),
@@ -274,9 +237,7 @@ impl From<CtfdChallenge> for Challenge {
         .tags
         .into_iter()
         .filter_map(|t| {
-          t.as_str()
-            .map(|s| s.to_string())
-            .or_else(|| t.get("value").and_then(|v| v.as_str()).map(|s| s.to_string()))
+          t.as_str().map(|s| s.to_string()).or_else(|| t.get("value").and_then(|v| v.as_str()).map(|s| s.to_string()))
         })
         .collect(),
       hints: c.hints.into_iter().map(|h| h.into()).collect(),
@@ -286,11 +247,7 @@ impl From<CtfdChallenge> for Challenge {
 
 impl From<CtfdHint> for Hint {
   fn from(h: CtfdHint) -> Self {
-    Hint {
-      id: h.id.to_string(),
-      content: h.content,
-      cost: h.cost,
-    }
+    Hint { id: h.id.to_string(), content: h.content, cost: h.cost }
   }
 }
 
@@ -303,38 +260,19 @@ impl Platform for CtfdPlatform {
       Err(_) => self.get("/users/me").await?,
     };
 
-    let data = body
-      .get("data")
-      .ok_or_else(|| Error::Platform("Missing data field".into()))?;
+    let data = body.get("data").ok_or_else(|| Error::Platform("Missing data field".into()))?;
 
-    let name = data
-      .get("name")
-      .and_then(|n| n.as_str())
-      .unwrap_or("unknown")
-      .to_string();
-    let score = data
-      .get("score")
-      .and_then(|s| s.as_u64())
-      .unwrap_or(0) as u32;
-    let rank = data.get("place").and_then(|p| {
-      p.as_u64()
-        .map(|v| v as u32)
-        .or_else(|| p.as_str().and_then(|s| s.parse().ok()))
-    });
+    let name = data.get("name").and_then(|n| n.as_str()).unwrap_or("unknown").to_string();
+    let score = data.get("score").and_then(|s| s.as_u64()).unwrap_or(0) as u32;
+    let rank =
+      data.get("place").and_then(|p| p.as_u64().map(|v| v as u32).or_else(|| p.as_str().and_then(|s| s.parse().ok())));
 
-    Ok(TeamInfo {
-      name,
-      score,
-      rank,
-      solves: Vec::new(),
-    })
+    Ok(TeamInfo { name, score, rank, solves: Vec::new() })
   }
 
   async fn challenges(&self) -> Result<Vec<Challenge>> {
     let body = self.get("/challenges").await?;
-    let data = body
-      .get("data")
-      .ok_or_else(|| Error::Platform("Missing data field".into()))?;
+    let data = body.get("data").ok_or_else(|| Error::Platform("Missing data field".into()))?;
 
     let ctfd_challenges: Vec<CtfdChallenge> = serde_json::from_value(data.clone())?;
     let mut challenges: Vec<Challenge> = ctfd_challenges.into_iter().map(|c| c.into()).collect();
@@ -356,18 +294,15 @@ impl Platform for CtfdPlatform {
 
   async fn challenge(&self, id: &str) -> Result<Challenge> {
     let body = self.get(&format!("/challenges/{id}")).await?;
-    let data = body
-      .get("data")
-      .ok_or_else(|| Error::Platform("Missing data field".into()))?;
+    let data = body.get("data").ok_or_else(|| Error::Platform("Missing data field".into()))?;
 
     let ctfd_challenge: CtfdChallenge = serde_json::from_value(data.clone())?;
     Ok(ctfd_challenge.into())
   }
 
   async fn submit(&self, challenge_id: &str, flag: &str) -> Result<SubmitResult> {
-    let challenge_id_num: u64 = challenge_id
-      .parse()
-      .map_err(|_| Error::Platform(format!("Invalid challenge ID: {challenge_id}")))?;
+    let challenge_id_num: u64 =
+      challenge_id.parse().map_err(|_| Error::Platform(format!("Invalid challenge ID: {challenge_id}")))?;
 
     let payload = serde_json::json!({
       "challenge_id": challenge_id_num,
@@ -376,36 +311,22 @@ impl Platform for CtfdPlatform {
 
     let body = self.post("/challenges/attempt", &payload).await?;
 
-    let data = body
-      .get("data")
-      .ok_or_else(|| Error::Platform("Missing data field".into()))?;
+    let data = body.get("data").ok_or_else(|| Error::Platform("Missing data field".into()))?;
 
-    let status = data
-      .get("status")
-      .and_then(|s| s.as_str())
-      .unwrap_or("");
+    let status = data.get("status").and_then(|s| s.as_str()).unwrap_or("");
 
     match status {
       "correct" => {
         let challenge = self.challenge(challenge_id).await.ok();
-        let name = challenge
-          .as_ref()
-          .map(|c| c.name.clone())
-          .unwrap_or_else(|| challenge_id.to_string());
+        let name = challenge.as_ref().map(|c| c.name.clone()).unwrap_or_else(|| challenge_id.to_string());
         let points = challenge.as_ref().map(|c| c.value).unwrap_or(0);
-        Ok(SubmitResult::Correct {
-          challenge: name,
-          points,
-        })
+        Ok(SubmitResult::Correct { challenge: name, points })
       }
       "incorrect" => Ok(SubmitResult::Incorrect),
       "already_solved" => Ok(SubmitResult::AlreadySolved),
       "ratelimited" => {
         // Try to parse retry_after from the response message
-        let message = data
-          .get("message")
-          .and_then(|m| m.as_str())
-          .unwrap_or("");
+        let message = data.get("message").and_then(|m| m.as_str()).unwrap_or("");
         let retry_after = message
           .split_whitespace()
           .find_map(|word| word.trim_end_matches(|c: char| !c.is_ascii_digit()).parse::<u64>().ok());
@@ -418,9 +339,7 @@ impl Platform for CtfdPlatform {
   async fn scoreboard(&self, limit: Option<u32>) -> Result<Vec<ScoreboardEntry>> {
     let limit = limit.unwrap_or(10);
     let body = self.get(&format!("/scoreboard/top/{limit}")).await?;
-    let data = body
-      .get("data")
-      .ok_or_else(|| Error::Platform("Missing data field".into()))?;
+    let data = body.get("data").ok_or_else(|| Error::Platform("Missing data field".into()))?;
 
     let mut entries = Vec::new();
 
@@ -428,21 +347,12 @@ impl Platform for CtfdPlatform {
     if let Some(obj) = data.as_object() {
       for (rank_str, team_data) in obj {
         let rank: u32 = rank_str.parse().unwrap_or(0);
-        let name = team_data
-          .get("name")
-          .and_then(|n| n.as_str())
-          .unwrap_or("unknown")
-          .to_string();
+        let name = team_data.get("name").and_then(|n| n.as_str()).unwrap_or("unknown").to_string();
 
         let score = team_data
           .get("solves")
           .and_then(|s| s.as_array())
-          .map(|solves| {
-            solves
-              .iter()
-              .filter_map(|s| s.get("value").and_then(|v| v.as_u64()))
-              .sum::<u64>() as u32
-          })
+          .map(|solves| solves.iter().filter_map(|s| s.get("value").and_then(|v| v.as_u64())).sum::<u64>() as u32)
           .unwrap_or(0);
 
         entries.push(ScoreboardEntry { rank, name, score });
@@ -454,20 +364,12 @@ impl Platform for CtfdPlatform {
   }
 
   async fn download_file(&self, file: &ChallengeFile, dest: &Path) -> Result<()> {
-    let url = if file.url.starts_with("http") {
-      file.url.clone()
-    } else {
-      format!("{}{}", self.base_url, file.url)
-    };
+    let url = if file.url.starts_with("http") { file.url.clone() } else { format!("{}{}", self.base_url, file.url) };
 
     let req = self.client.get(&url);
     let resp = self.apply_auth(req).send().await?;
     if !resp.status().is_success() {
-      return Err(Error::Platform(format!(
-        "Failed to download file '{}' (HTTP {})",
-        file.name,
-        resp.status()
-      )));
+      return Err(Error::Platform(format!("Failed to download file '{}' (HTTP {})", file.name, resp.status())));
     }
 
     let bytes = resp.bytes().await?;
@@ -477,30 +379,16 @@ impl Platform for CtfdPlatform {
 
   async fn notifications(&self) -> Result<Vec<Notification>> {
     let body = self.get("/notifications").await?;
-    let data = body
-      .get("data")
-      .ok_or_else(|| Error::Platform("Missing data field".into()))?;
+    let data = body.get("data").ok_or_else(|| Error::Platform("Missing data field".into()))?;
 
     let raw: Vec<serde_json::Value> = serde_json::from_value(data.clone())?;
     let notifications = raw
       .into_iter()
       .map(|n| Notification {
         id: n.get("id").and_then(|v| v.as_u64()).unwrap_or(0).to_string(),
-        title: n
-          .get("title")
-          .and_then(|v| v.as_str())
-          .unwrap_or("")
-          .to_string(),
-        content: n
-          .get("content")
-          .and_then(|v| v.as_str())
-          .unwrap_or("")
-          .to_string(),
-        date: n
-          .get("date")
-          .and_then(|v| v.as_str())
-          .unwrap_or("")
-          .to_string(),
+        title: n.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        content: n.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        date: n.get("date").and_then(|v| v.as_str()).unwrap_or("").to_string(),
       })
       .collect();
     Ok(notifications)
@@ -514,9 +402,7 @@ impl Platform for CtfdPlatform {
     self.post("/unlocks", &payload).await?;
 
     let body = self.get(&format!("/hints/{hint_id}")).await?;
-    let data = body
-      .get("data")
-      .ok_or_else(|| Error::Platform("Missing data field".into()))?;
+    let data = body.get("data").ok_or_else(|| Error::Platform("Missing data field".into()))?;
 
     Ok(Hint {
       id: hint_id.to_string(),
@@ -595,10 +481,7 @@ mod tests {
       value: 0,
       solves: 0,
       solved_by_me: None,
-      files: vec![
-        "/files/abc123/challenge.py?token=xyz".into(),
-        "/files/def456/flag.enc".into(),
-      ],
+      files: vec!["/files/abc123/challenge.py?token=xyz".into(), "/files/def456/flag.enc".into()],
       tags: vec![],
       hints: vec![],
     };
@@ -609,48 +492,34 @@ mod tests {
 
   #[test]
   fn auth_method_session_cookie() {
-    let plat = CtfdPlatform::new(
-      "https://ctf.example.com".into(),
-      "abc123.XYZdef456".into(),
-    );
+    let plat = CtfdPlatform::new("https://ctf.example.com".into(), "abc123.XYZdef456".into());
     assert!(matches!(plat.auth, AuthMethod::Session));
   }
 
   #[test]
   fn auth_method_api_token() {
-    let plat = CtfdPlatform::new(
-      "https://ctf.example.com".into(),
-      "abcdef1234567890".into(),
-    );
+    let plat = CtfdPlatform::new("https://ctf.example.com".into(), "abcdef1234567890".into());
     assert!(matches!(plat.auth, AuthMethod::Token(_)));
   }
 
   #[test]
   fn auth_method_ctfd_prefix_token() {
-    let plat = CtfdPlatform::new(
-      "https://ctf.example.com".into(),
-      "ctfd_abcdef.1234567890".into(),
-    );
+    let plat = CtfdPlatform::new("https://ctf.example.com".into(), "ctfd_abcdef.1234567890".into());
     assert!(matches!(plat.auth, AuthMethod::Token(_)));
   }
 
   #[test]
   fn auth_method_pure_hex_is_token() {
     // Pure hex string without dots — definitely an API token
-    let plat = CtfdPlatform::new(
-      "https://ctf.example.com".into(),
-      "a1b2c3d4e5f6".into(),
-    );
+    let plat = CtfdPlatform::new("https://ctf.example.com".into(), "a1b2c3d4e5f6".into());
     assert!(matches!(plat.auth, AuthMethod::Token(_)));
   }
 
   #[test]
   fn auth_method_flask_session_with_three_parts() {
     // Typical Flask session: base64.timestamp.signature
-    let plat = CtfdPlatform::new(
-      "https://ctf.example.com".into(),
-      "eyJpZCI6MX0.ZxYzAw.aBcDeFgHiJkLmNoPqRsTuVwXyZ".into(),
-    );
+    let plat =
+      CtfdPlatform::new("https://ctf.example.com".into(), "eyJpZCI6MX0.ZxYzAw.aBcDeFgHiJkLmNoPqRsTuVwXyZ".into());
     assert!(matches!(plat.auth, AuthMethod::Session));
   }
 }

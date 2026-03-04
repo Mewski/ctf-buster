@@ -24,32 +24,18 @@ pub trait Platform: Send + Sync {
   async fn notifications(&self) -> Result<Vec<Notification>>;
 }
 
-pub async fn create_platform(
-  config: &PlatformConfig,
-  token: &str,
-) -> Result<Box<dyn Platform>> {
+pub async fn create_platform(config: &PlatformConfig, token: &str) -> Result<Box<dyn Platform>> {
   match &config.platform_type {
     Some(t) => match t.as_str() {
-      "ctfd" => Ok(Box::new(ctfd::CtfdPlatform::new(
-        config.url.clone(),
-        token.to_string(),
-      ))),
-      "rctf" => Ok(Box::new(rctf::RctfPlatform::new(
-        config.url.clone(),
-        token.to_string(),
-      ))),
-      other => Err(crate::error::Error::Config(format!(
-        "Unknown platform type: {other}"
-      ))),
+      "ctfd" => Ok(Box::new(ctfd::CtfdPlatform::new(config.url.clone(), token.to_string()))),
+      "rctf" => Ok(Box::new(rctf::RctfPlatform::new(config.url.clone(), token.to_string()))),
+      other => Err(crate::error::Error::Config(format!("Unknown platform type: {other}"))),
     },
     None => detect_platform(config, token).await,
   }
 }
 
-async fn detect_platform(
-  config: &PlatformConfig,
-  token: &str,
-) -> Result<Box<dyn Platform>> {
+async fn detect_platform(config: &PlatformConfig, token: &str) -> Result<Box<dyn Platform>> {
   // Try CTFd first — construct platform and probe whoami
   let ctfd = ctfd::CtfdPlatform::new(config.url.clone(), token.to_string());
   if ctfd.whoami().await.is_ok() {

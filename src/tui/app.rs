@@ -93,20 +93,11 @@ impl App {
   }
 
   pub fn solved_count(&self) -> usize {
-    self.state
-      .challenges
-      .values()
-      .filter(|c| c.status == ChallengeStatus::Solved)
-      .count()
+    self.state.challenges.values().filter(|c| c.status == ChallengeStatus::Solved).count()
   }
 
   pub fn total_points(&self) -> u32 {
-    self.state
-      .challenges
-      .values()
-      .filter(|c| c.status == ChallengeStatus::Solved)
-      .filter_map(|c| c.points)
-      .sum()
+    self.state.challenges.values().filter(|c| c.status == ChallengeStatus::Solved).filter_map(|c| c.points).sum()
   }
 
   pub fn sorted_challenges(&self) -> Vec<&ChallengeState> {
@@ -126,8 +117,7 @@ impl App {
   }
 
   pub fn categories(&self) -> Vec<(String, usize, usize)> {
-    let mut cats: std::collections::BTreeMap<String, (usize, usize)> =
-      std::collections::BTreeMap::new();
+    let mut cats: std::collections::BTreeMap<String, (usize, usize)> = std::collections::BTreeMap::new();
     for c in self.state.challenges.values() {
       let entry = cats.entry(c.category.clone()).or_insert((0, 0));
       entry.1 += 1;
@@ -135,10 +125,7 @@ impl App {
         entry.0 += 1;
       }
     }
-    cats
-      .into_iter()
-      .map(|(cat, (solved, total))| (cat, solved, total))
-      .collect()
+    cats.into_iter().map(|(cat, (solved, total))| (cat, solved, total)).collect()
   }
 }
 
@@ -149,9 +136,7 @@ pub async fn run_dashboard(workspace_root: PathBuf, workspace_name: String) -> R
   let mut last_poll = Instant::now();
 
   loop {
-    terminal
-      .draw(|frame| super::ui::draw(frame, &app))
-      .map_err(crate::error::Error::Io)?;
+    terminal.draw(|frame| super::ui::draw(frame, &app)).map_err(crate::error::Error::Io)?;
 
     if event::poll(Duration::from_millis(250)).unwrap_or(false) {
       if let Ok(Event::Key(key)) = event::read() {
@@ -180,12 +165,7 @@ mod tests {
 
   use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-  fn make_challenge(
-    name: &str,
-    category: &str,
-    status: ChallengeStatus,
-    points: Option<u32>,
-  ) -> ChallengeState {
+  fn make_challenge(name: &str, category: &str, status: ChallengeStatus, points: Option<u32>) -> ChallengeState {
     ChallengeState {
       id: name.to_lowercase().replace(' ', "-"),
       name: name.into(),
@@ -284,9 +264,7 @@ mod tests {
 
   #[test]
   fn total_points_zero_when_none_solved() {
-    let app = make_app(vec![
-      make_challenge("A", "crypto", ChallengeStatus::Unsolved, Some(100)),
-    ]);
+    let app = make_app(vec![make_challenge("A", "crypto", ChallengeStatus::Unsolved, Some(100))]);
     assert_eq!(app.total_points(), 0);
   }
 
@@ -312,7 +290,7 @@ mod tests {
     let sorted = app.sorted_challenges();
     // InProgress first, then Unsolved, then Solved
     assert_eq!(sorted[0].name, "Gamma"); // InProgress
-    // Unsolved: crypto before web
+                                         // Unsolved: crypto before web
     assert_eq!(sorted[1].name, "Beta"); // Unsolved, crypto
     assert_eq!(sorted[2].name, "Alpha"); // Unsolved, web
     assert_eq!(sorted[3].name, "Zebra"); // Solved

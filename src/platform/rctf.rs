@@ -16,11 +16,7 @@ pub struct RctfPlatform {
 
 impl RctfPlatform {
   pub fn new(url: String, token: String) -> Self {
-    Self {
-      base_url: url.trim_end_matches('/').to_string(),
-      token,
-      client: Client::new(),
-    }
+    Self { base_url: url.trim_end_matches('/').to_string(), token, client: Client::new() }
   }
 
   fn api_url(&self, path: &str) -> String {
@@ -28,12 +24,8 @@ impl RctfPlatform {
   }
 
   async fn get(&self, path: &str) -> Result<serde_json::Value> {
-    let resp = self
-      .client
-      .get(self.api_url(path))
-      .header("Authorization", format!("Bearer {}", self.token))
-      .send()
-      .await?;
+    let resp =
+      self.client.get(self.api_url(path)).header("Authorization", format!("Bearer {}", self.token)).send().await?;
 
     let status = resp.status();
     let body: serde_json::Value = resp.json().await?;
@@ -46,10 +38,7 @@ impl RctfPlatform {
       )));
     }
 
-    let kind = body
-      .get("kind")
-      .and_then(|k| k.as_str())
-      .unwrap_or("");
+    let kind = body.get("kind").and_then(|k| k.as_str()).unwrap_or("");
     if kind.starts_with("bad") {
       return Err(Error::Platform(format!(
         "rCTF API error: {}",
@@ -107,33 +96,17 @@ struct RctfFile {
 impl Platform for RctfPlatform {
   async fn whoami(&self) -> Result<TeamInfo> {
     let body = self.get("/users/me").await?;
-    let data = body
-      .get("data")
-      .ok_or_else(|| Error::Platform("Missing data field".into()))?;
+    let data = body.get("data").ok_or_else(|| Error::Platform("Missing data field".into()))?;
 
-    let name = data
-      .get("name")
-      .and_then(|n| n.as_str())
-      .unwrap_or("unknown")
-      .to_string();
-    let score = data
-      .get("score")
-      .and_then(|s| s.as_u64())
-      .unwrap_or(0) as u32;
+    let name = data.get("name").and_then(|n| n.as_str()).unwrap_or("unknown").to_string();
+    let score = data.get("score").and_then(|s| s.as_u64()).unwrap_or(0) as u32;
 
-    Ok(TeamInfo {
-      name,
-      score,
-      rank: None,
-      solves: Vec::new(),
-    })
+    Ok(TeamInfo { name, score, rank: None, solves: Vec::new() })
   }
 
   async fn challenges(&self) -> Result<Vec<Challenge>> {
     let body = self.get("/challs").await?;
-    let data = body
-      .get("data")
-      .ok_or_else(|| Error::Platform("Missing data field".into()))?;
+    let data = body.get("data").ok_or_else(|| Error::Platform("Missing data field".into()))?;
 
     let rctf_challs: Vec<RctfChallenge> = serde_json::from_value(data.clone())?;
 
@@ -148,14 +121,7 @@ impl Platform for RctfPlatform {
           value: c.points,
           solves: c.solves,
           solved_by_me: false, // rCTF doesn't include this in the list endpoint
-          files: c
-            .files
-            .into_iter()
-            .map(|f| ChallengeFile {
-              name: f.name,
-              url: f.url,
-            })
-            .collect(),
+          files: c.files.into_iter().map(|f| ChallengeFile { name: f.name, url: f.url }).collect(),
           tags: Vec::new(),
           hints: Vec::new(),
         })
@@ -165,9 +131,7 @@ impl Platform for RctfPlatform {
 
   async fn challenge(&self, id: &str) -> Result<Challenge> {
     let body = self.get(&format!("/challs/{id}")).await?;
-    let data = body
-      .get("data")
-      .ok_or_else(|| Error::Platform("Missing data field".into()))?;
+    let data = body.get("data").ok_or_else(|| Error::Platform("Missing data field".into()))?;
 
     let c: RctfChallenge = serde_json::from_value(data.clone())?;
     Ok(Challenge {
@@ -178,14 +142,7 @@ impl Platform for RctfPlatform {
       value: c.points,
       solves: c.solves,
       solved_by_me: false,
-      files: c
-        .files
-        .into_iter()
-        .map(|f| ChallengeFile {
-          name: f.name,
-          url: f.url,
-        })
-        .collect(),
+      files: c.files.into_iter().map(|f| ChallengeFile { name: f.name, url: f.url }).collect(),
       tags: Vec::new(),
       hints: Vec::new(),
     })
@@ -193,35 +150,21 @@ impl Platform for RctfPlatform {
 
   async fn submit(&self, challenge_id: &str, flag: &str) -> Result<SubmitResult> {
     let payload = serde_json::json!({ "flag": flag });
-    let body = self
-      .post(&format!("/challs/{challenge_id}/submit"), &payload)
-      .await?;
+    let body = self.post(&format!("/challs/{challenge_id}/submit"), &payload).await?;
 
-    let kind = body
-      .get("kind")
-      .and_then(|k| k.as_str())
-      .unwrap_or("");
+    let kind = body.get("kind").and_then(|k| k.as_str()).unwrap_or("");
 
     match kind {
       "goodFlag" => {
         let challenge = self.challenge(challenge_id).await.ok();
-        let name = challenge
-          .as_ref()
-          .map(|c| c.name.clone())
-          .unwrap_or_else(|| challenge_id.to_string());
+        let name = challenge.as_ref().map(|c| c.name.clone()).unwrap_or_else(|| challenge_id.to_string());
         let points = challenge.as_ref().map(|c| c.value).unwrap_or(0);
-        Ok(SubmitResult::Correct {
-          challenge: name,
-          points,
-        })
+        Ok(SubmitResult::Correct { challenge: name, points })
       }
       "badFlag" => Ok(SubmitResult::Incorrect),
       "badAlreadySolvedFlag" => Ok(SubmitResult::AlreadySolved),
       "badRateLimit" => {
-        let retry_after = body
-          .get("data")
-          .and_then(|d| d.get("timeLeft"))
-          .and_then(|t| t.as_u64());
+        let retry_after = body.get("data").and_then(|d| d.get("timeLeft")).and_then(|t| t.as_u64());
         Ok(SubmitResult::RateLimited { retry_after })
       }
       _ => Err(Error::Platform(format!("Unknown rCTF response kind: {kind}"))),
@@ -230,12 +173,8 @@ impl Platform for RctfPlatform {
 
   async fn scoreboard(&self, limit: Option<u32>) -> Result<Vec<ScoreboardEntry>> {
     let limit = limit.unwrap_or(10);
-    let body = self
-      .get(&format!("/leaderboard/now?limit={limit}&offset=0"))
-      .await?;
-    let data = body
-      .get("data")
-      .ok_or_else(|| Error::Platform("Missing data field".into()))?;
+    let body = self.get(&format!("/leaderboard/now?limit={limit}&offset=0")).await?;
+    let data = body.get("data").ok_or_else(|| Error::Platform("Missing data field".into()))?;
 
     let leaderboard = data
       .get("leaderboard")
@@ -244,38 +183,18 @@ impl Platform for RctfPlatform {
 
     let mut entries = Vec::new();
     for (i, entry) in leaderboard.iter().enumerate() {
-      let name = entry
-        .get("name")
-        .and_then(|n| n.as_str())
-        .unwrap_or("unknown")
-        .to_string();
-      let score = entry
-        .get("score")
-        .and_then(|s| s.as_u64())
-        .unwrap_or(0) as u32;
-      entries.push(ScoreboardEntry {
-        rank: (i + 1) as u32,
-        name,
-        score,
-      });
+      let name = entry.get("name").and_then(|n| n.as_str()).unwrap_or("unknown").to_string();
+      let score = entry.get("score").and_then(|s| s.as_u64()).unwrap_or(0) as u32;
+      entries.push(ScoreboardEntry { rank: (i + 1) as u32, name, score });
     }
 
     Ok(entries)
   }
 
   async fn download_file(&self, file: &ChallengeFile, dest: &Path) -> Result<()> {
-    let url = if file.url.starts_with("http") {
-      file.url.clone()
-    } else {
-      format!("{}{}", self.base_url, file.url)
-    };
+    let url = if file.url.starts_with("http") { file.url.clone() } else { format!("{}{}", self.base_url, file.url) };
 
-    let resp = self
-      .client
-      .get(&url)
-      .header("Authorization", format!("Bearer {}", self.token))
-      .send()
-      .await?;
+    let resp = self.client.get(&url).header("Authorization", format!("Bearer {}", self.token)).send().await?;
 
     let bytes = resp.bytes().await?;
     tokio::fs::write(dest, &bytes).await?;
@@ -283,9 +202,7 @@ impl Platform for RctfPlatform {
   }
 
   async fn unlock_hint(&self, _hint_id: &str) -> Result<Hint> {
-    Err(Error::Platform(
-      "rCTF does not support hint unlocking".into(),
-    ))
+    Err(Error::Platform("rCTF does not support hint unlocking".into()))
   }
 
   async fn notifications(&self) -> Result<Vec<Notification>> {
@@ -346,10 +263,7 @@ mod tests {
       description: "Pwn it".into(),
       points: 400,
       solves: 3,
-      files: vec![RctfFile {
-        name: "binary".into(),
-        url: "/dl/binary".into(),
-      }],
+      files: vec![RctfFile { name: "binary".into(), url: "/dl/binary".into() }],
     };
 
     let challenge = Challenge {
@@ -360,14 +274,7 @@ mod tests {
       value: rctf.points,
       solves: rctf.solves,
       solved_by_me: false,
-      files: rctf
-        .files
-        .iter()
-        .map(|f| ChallengeFile {
-          name: f.name.clone(),
-          url: f.url.clone(),
-        })
-        .collect(),
+      files: rctf.files.iter().map(|f| ChallengeFile { name: f.name.clone(), url: f.url.clone() }).collect(),
       tags: Vec::new(),
       hints: Vec::new(),
     };
@@ -409,10 +316,7 @@ mod tests {
     let kind = body.get("kind").and_then(|k| k.as_str()).unwrap();
     assert_eq!(kind, "badRateLimit");
 
-    let time_left = body
-      .get("data")
-      .and_then(|d| d.get("timeLeft"))
-      .and_then(|t| t.as_u64());
+    let time_left = body.get("data").and_then(|d| d.get("timeLeft")).and_then(|t| t.as_u64());
     assert_eq!(time_left, Some(30000));
   }
 
@@ -439,13 +343,7 @@ mod tests {
       }
     });
 
-    let leaderboard = body
-      .get("data")
-      .unwrap()
-      .get("leaderboard")
-      .unwrap()
-      .as_array()
-      .unwrap();
+    let leaderboard = body.get("data").unwrap().get("leaderboard").unwrap().as_array().unwrap();
 
     assert_eq!(leaderboard.len(), 3);
     assert_eq!(leaderboard[0].get("name").unwrap().as_str().unwrap(), "Team1");

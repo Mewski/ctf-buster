@@ -6,11 +6,7 @@ use crate::platform::types::Challenge;
 use crate::workspace::state::ChallengeState;
 
 /// Returns the directory path for a challenge based on the scaffold template.
-pub fn challenge_dir(
-  workspace_root: &Path,
-  challenge: &Challenge,
-  config: &ScaffoldConfig,
-) -> PathBuf {
+pub fn challenge_dir(workspace_root: &Path, challenge: &Challenge, config: &ScaffoldConfig) -> PathBuf {
   let path = config
     .template
     .replace("{category}", &sanitize_name(&challenge.category))
@@ -19,11 +15,7 @@ pub fn challenge_dir(
 }
 
 /// Scaffold a challenge directory. Returns true if the directory was newly created.
-pub fn scaffold_challenge(
-  workspace_root: &Path,
-  challenge: &Challenge,
-  config: &ScaffoldConfig,
-) -> Result<bool> {
+pub fn scaffold_challenge(workspace_root: &Path, challenge: &Challenge, config: &ScaffoldConfig) -> Result<bool> {
   let dir = challenge_dir(workspace_root, challenge, config);
 
   if dir.exists() {
@@ -53,15 +45,9 @@ pub fn scaffold_challenge(
 /// Strips directory components and replaces dangerous characters.
 pub fn sanitize_filename(name: &str) -> String {
   // Take only the filename component (strip any directory traversal)
-  let name = Path::new(name)
-    .file_name()
-    .and_then(|n| n.to_str())
-    .unwrap_or("unknown");
+  let name = Path::new(name).file_name().and_then(|n| n.to_str()).unwrap_or("unknown");
   // Remove any remaining path separators or null bytes
-  let sanitized: String = name
-    .chars()
-    .filter(|&c| c != '\0' && c != '/' && c != '\\')
-    .collect();
+  let sanitized: String = name.chars().filter(|&c| c != '\0' && c != '/' && c != '\\').collect();
   if sanitized.is_empty() || sanitized == "." || sanitized == ".." {
     "unknown".to_string()
   } else {
@@ -237,18 +223,12 @@ pub fn generate_writeup(challenge_state: &ChallengeState) -> String {
      **Flag:** `{}`\n",
     challenge_state.name,
     challenge_state.category,
-    challenge_state
-      .points
-      .map(|p| p.to_string())
-      .unwrap_or_else(|| "?".into()),
+    challenge_state.points.map(|p| p.to_string()).unwrap_or_else(|| "?".into()),
     challenge_state.flag.as_deref().unwrap_or("?"),
   );
 
   if let Some(solved_at) = &challenge_state.solved_at {
-    doc.push_str(&format!(
-      "**Solved:** {}\n",
-      solved_at.format("%Y-%m-%d %H:%M UTC")
-    ));
+    doc.push_str(&format!("**Solved:** {}\n", solved_at.format("%Y-%m-%d %H:%M UTC")));
   }
 
   if let Some(desc) = &challenge_state.description {
@@ -347,11 +327,7 @@ mod tests {
   #[test]
   fn challenge_dir_custom_template() {
     let c = make_challenge("Easy RSA", "Crypto");
-    let config = ScaffoldConfig {
-      template: "{name}".into(),
-      create_solve_file: false,
-      create_notes_file: false,
-    };
+    let config = ScaffoldConfig { template: "{name}".into(), create_solve_file: false, create_notes_file: false };
     let dir = challenge_dir(Path::new("/ws"), &c, &config);
     assert_eq!(dir, Path::new("/ws/easy-rsa"));
   }
@@ -540,14 +516,7 @@ mod tests {
 
   #[test]
   fn generate_writeup_minimal() {
-    let cs = make_challenge_state(
-      "Mystery",
-      "misc",
-      None,
-      None,
-      None,
-      None,
-    );
+    let cs = make_challenge_state("Mystery", "misc", None, None, None, None);
     let output = generate_writeup(&cs);
     assert!(output.contains("# Mystery -- Writeup"));
     assert!(output.contains("**Category:** misc"));

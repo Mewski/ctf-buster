@@ -6,12 +6,7 @@ use crate::workspace::state::ChallengeStatus;
 use super::app::{ActivePanel, App};
 
 pub fn draw(frame: &mut Frame, app: &App) {
-  let root = Layout::vertical([
-    Constraint::Length(3),
-    Constraint::Min(0),
-    Constraint::Length(1),
-  ])
-  .split(frame.area());
+  let root = Layout::vertical([Constraint::Length(3), Constraint::Min(0), Constraint::Length(1)]).split(frame.area());
 
   draw_header(frame, root[0], app);
   draw_body(frame, root[1], app);
@@ -35,43 +30,28 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
     .unwrap_or_else(|| "never".into());
 
   let line = Line::from(vec![
-    Span::styled(
-      format!(" CTF: {} ", app.workspace_name),
-      Style::default().fg(Color::Cyan).bold(),
-    ),
+    Span::styled(format!(" CTF: {} ", app.workspace_name), Style::default().fg(Color::Cyan).bold()),
     Span::raw(" | "),
     Span::styled(
-      format!(
-        "Solved: {}/{} ",
-        app.solved_count(),
-        app.state.challenges.len()
-      ),
+      format!("Solved: {}/{} ", app.solved_count(), app.state.challenges.len()),
       Style::default().fg(Color::Green).bold(),
     ),
-    Span::styled(
-      format!("({} pts) ", app.total_points()),
-      Style::default().fg(Color::Yellow),
-    ),
+    Span::styled(format!("({} pts) ", app.total_points()), Style::default().fg(Color::Yellow)),
     Span::raw(" | "),
     Span::raw(format!("Synced: {sync_ago} ")),
   ]);
 
-  let block = Block::bordered()
-    .title(" ctf-buster ")
-    .border_style(Style::default().fg(Color::DarkGray));
+  let block = Block::bordered().title(" ctf-buster ").border_style(Style::default().fg(Color::DarkGray));
   let para = Paragraph::new(line).block(block);
   frame.render_widget(para, area);
 }
 
 fn draw_body(frame: &mut Frame, area: Rect, app: &App) {
-  let cols = Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)])
-    .split(area);
+  let cols = Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)]).split(area);
 
-  let left =
-    Layout::vertical([Constraint::Percentage(70), Constraint::Percentage(30)]).split(cols[0]);
+  let left = Layout::vertical([Constraint::Percentage(70), Constraint::Percentage(30)]).split(cols[0]);
 
-  let right =
-    Layout::vertical([Constraint::Percentage(60), Constraint::Percentage(40)]).split(cols[1]);
+  let right = Layout::vertical([Constraint::Percentage(60), Constraint::Percentage(40)]).split(cols[1]);
 
   draw_challenges_table(frame, left[0], app);
   draw_categories(frame, left[1], app);
@@ -80,21 +60,18 @@ fn draw_body(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn panel_border(title: &str, active: bool) -> Block<'_> {
-  Block::bordered()
-    .title(format!(" {title} "))
-    .border_style(if active {
-      Style::default().fg(Color::Cyan)
-    } else {
-      Style::default().fg(Color::DarkGray)
-    })
+  Block::bordered().title(format!(" {title} ")).border_style(if active {
+    Style::default().fg(Color::Cyan)
+  } else {
+    Style::default().fg(Color::DarkGray)
+  })
 }
 
 fn draw_challenges_table(frame: &mut Frame, area: Rect, app: &App) {
   let challenges = app.sorted_challenges();
 
-  let header = Row::new(["Name", "Category", "Pts", "Status"])
-    .style(Style::default().bold().fg(Color::White))
-    .bottom_margin(1);
+  let header =
+    Row::new(["Name", "Category", "Pts", "Status"]).style(Style::default().bold().fg(Color::White)).bottom_margin(1);
 
   let rows = challenges.iter().map(|c| {
     let (status_str, style) = match c.status {
@@ -113,12 +90,7 @@ fn draw_challenges_table(frame: &mut Frame, area: Rect, app: &App) {
 
   let table = Table::new(
     rows,
-    [
-      Constraint::Percentage(40),
-      Constraint::Percentage(25),
-      Constraint::Percentage(15),
-      Constraint::Percentage(20),
-    ],
+    [Constraint::Percentage(40), Constraint::Percentage(25), Constraint::Percentage(15), Constraint::Percentage(20)],
   )
   .header(header)
   .block(panel_border("Challenges", app.active_panel == ActivePanel::Challenges));
@@ -131,19 +103,15 @@ fn draw_queue(frame: &mut Frame, area: Rect, app: &App) {
   let orch = &app.state.orchestration;
   let mut lines = Vec::new();
 
-  lines.push(Line::from(Span::styled(
-    format!("Queued: {}", orch.queue.len()),
-    Style::default().fg(Color::White).bold(),
-  )));
+  lines
+    .push(Line::from(Span::styled(format!("Queued: {}", orch.queue.len()), Style::default().fg(Color::White).bold())));
   for q in orch.queue.iter().take(10) {
-    lines.push(Line::from(
-      format!("  {} ({}, p{})", q.name, q.category, q.priority)
-    ));
+    lines.push(Line::from(format!("  {} ({}, p{})", q.name, q.category, q.priority)));
   }
   if orch.queue.len() > 10 {
-    lines.push(Line::from(
-      format!("  ... and {} more", orch.queue.len() - 10)
-    ).style(Style::default().fg(Color::DarkGray)));
+    lines.push(
+      Line::from(format!("  ... and {} more", orch.queue.len() - 10)).style(Style::default().fg(Color::DarkGray)),
+    );
   }
 
   lines.push(Line::from(""));
@@ -152,21 +120,14 @@ fn draw_queue(frame: &mut Frame, area: Rect, app: &App) {
     Style::default().fg(Color::Yellow).bold(),
   )));
   for name in &orch.in_progress {
-    lines.push(
-      Line::from(format!("  {name}")).style(Style::default().fg(Color::Yellow)),
-    );
+    lines.push(Line::from(format!("  {name}")).style(Style::default().fg(Color::Yellow)));
   }
 
   lines.push(Line::from(""));
-  lines.push(Line::from(Span::styled(
-    format!("Failed: {}", orch.failed.len()),
-    Style::default().fg(Color::Red).bold(),
-  )));
+  lines
+    .push(Line::from(Span::styled(format!("Failed: {}", orch.failed.len()), Style::default().fg(Color::Red).bold())));
   for f in orch.failed.iter().take(5) {
-    lines.push(
-      Line::from(format!("  {} ({})", f.name, f.notes))
-        .style(Style::default().fg(Color::Red)),
-    );
+    lines.push(Line::from(format!("  {} ({})", f.name, f.notes)).style(Style::default().fg(Color::Red)));
   }
 
   let block = panel_border("Queue", app.active_panel == ActivePanel::Queue);
@@ -193,9 +154,7 @@ fn draw_categories(frame: &mut Frame, area: Rect, app: &App) {
     lines.push(Line::from("  No challenges synced").style(Style::default().fg(Color::DarkGray)));
   }
 
-  let block = Block::bordered()
-    .title(" Categories ")
-    .border_style(Style::default().fg(Color::DarkGray));
+  let block = Block::bordered().title(" Categories ").border_style(Style::default().fg(Color::DarkGray));
   let para = Paragraph::new(lines).block(block);
   frame.render_widget(para, area);
 }
@@ -204,9 +163,7 @@ fn draw_notifications(frame: &mut Frame, area: Rect, app: &App) {
   let mut lines = Vec::new();
 
   if app.state.notifications.is_empty() {
-    lines.push(
-      Line::from("  No notifications").style(Style::default().fg(Color::DarkGray)),
-    );
+    lines.push(Line::from("  No notifications").style(Style::default().fg(Color::DarkGray)));
   } else {
     for (i, n) in app.state.notifications.iter().enumerate() {
       lines.push(Line::from(vec![
@@ -215,20 +172,13 @@ fn draw_notifications(frame: &mut Frame, area: Rect, app: &App) {
       ]));
       if !n.content.is_empty() {
         let preview: String = n.content.chars().take(60).collect();
-        lines.push(
-          Line::from(format!("    {preview}")).style(Style::default().fg(Color::DarkGray)),
-        );
+        lines.push(Line::from(format!("    {preview}")).style(Style::default().fg(Color::DarkGray)));
       }
     }
   }
 
-  let block = panel_border(
-    "Notifications",
-    app.active_panel == ActivePanel::Notifications,
-  );
-  let para = Paragraph::new(lines)
-    .block(block)
-    .wrap(Wrap { trim: true });
+  let block = panel_border("Notifications", app.active_panel == ActivePanel::Notifications);
+  let para = Paragraph::new(lines).block(block).wrap(Wrap { trim: true });
   frame.render_widget(para, area);
 }
 

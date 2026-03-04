@@ -21,12 +21,8 @@ pub fn find_workspace_root(from: &Path) -> Option<PathBuf> {
 
 pub fn load_workspace_config(workspace_root: &Path) -> Result<WorkspaceConfig> {
   let config_path = workspace_root.join(WORKSPACE_CONFIG_FILE);
-  let content = std::fs::read_to_string(&config_path).map_err(|e| {
-    Error::Config(format!(
-      "Failed to read {}: {e}",
-      config_path.display()
-    ))
-  })?;
+  let content = std::fs::read_to_string(&config_path)
+    .map_err(|e| Error::Config(format!("Failed to read {}: {e}", config_path.display())))?;
   let config: WorkspaceConfig = toml::from_str(&content)?;
 
   // Validate platform URL
@@ -43,10 +39,7 @@ pub fn load_workspace_config(workspace_root: &Path) -> Result<WorkspaceConfig> {
   // Validate platform type if specified
   if let Some(ref pt) = config.platform.platform_type {
     if !["ctfd", "rctf"].contains(&pt.as_str()) {
-      return Err(Error::Config(format!(
-        "Unknown platform type: '{}'. Supported: ctfd, rctf",
-        pt
-      )));
+      return Err(Error::Config(format!("Unknown platform type: '{}'. Supported: ctfd, rctf", pt)));
     }
   }
 

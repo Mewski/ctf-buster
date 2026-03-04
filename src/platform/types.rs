@@ -81,16 +81,9 @@ mod tests {
       value: 500,
       solves: 10,
       solved_by_me: false,
-      files: vec![ChallengeFile {
-        name: "data.bin".into(),
-        url: "/files/data.bin".into(),
-      }],
+      files: vec![ChallengeFile { name: "data.bin".into(), url: "/files/data.bin".into() }],
       tags: vec!["aes".into()],
-      hints: vec![Hint {
-        id: "1".into(),
-        content: Some("Try XOR".into()),
-        cost: 50,
-      }],
+      hints: vec![Hint { id: "1".into(), content: Some("Try XOR".into()), cost: 50 }],
     };
     let json = serde_json::to_string(&challenge).unwrap();
     let deserialized: Challenge = serde_json::from_str(&json).unwrap();
@@ -102,10 +95,7 @@ mod tests {
 
   #[test]
   fn submit_result_correct_roundtrip() {
-    let result = SubmitResult::Correct {
-      challenge: "test".into(),
-      points: 100,
-    };
+    let result = SubmitResult::Correct { challenge: "test".into(), points: 100 };
     let json = serde_json::to_string(&result).unwrap();
     let deserialized: SubmitResult = serde_json::from_str(&json).unwrap();
     match deserialized {
@@ -134,21 +124,11 @@ mod tests {
 
   #[test]
   fn team_info_with_and_without_rank() {
-    let with_rank = TeamInfo {
-      name: "team".into(),
-      score: 100,
-      rank: Some(3),
-      solves: vec![],
-    };
+    let with_rank = TeamInfo { name: "team".into(), score: 100, rank: Some(3), solves: vec![] };
     let json = serde_json::to_string(&with_rank).unwrap();
     assert!(json.contains("\"rank\":3"));
 
-    let without_rank = TeamInfo {
-      name: "team".into(),
-      score: 0,
-      rank: None,
-      solves: vec![],
-    };
+    let without_rank = TeamInfo { name: "team".into(), score: 0, rank: None, solves: vec![] };
     let json = serde_json::to_string(&without_rank).unwrap();
     assert!(json.contains("\"rank\":null"));
   }
@@ -180,11 +160,7 @@ mod tests {
 
   #[test]
   fn hint_with_content() {
-    let hint = Hint {
-      id: "5".into(),
-      content: Some("Check the RSA exponent".into()),
-      cost: 50,
-    };
+    let hint = Hint { id: "5".into(), content: Some("Check the RSA exponent".into()), cost: 50 };
     let json = serde_json::to_string(&hint).unwrap();
     let deserialized: Hint = serde_json::from_str(&json).unwrap();
     assert_eq!(deserialized.content.as_deref(), Some("Check the RSA exponent"));
@@ -193,11 +169,7 @@ mod tests {
 
   #[test]
   fn hint_without_content() {
-    let hint = Hint {
-      id: "6".into(),
-      content: None,
-      cost: 100,
-    };
+    let hint = Hint { id: "6".into(), content: None, cost: 100 };
     let json = serde_json::to_string(&hint).unwrap();
     assert!(json.contains("null"));
     let deserialized: Hint = serde_json::from_str(&json).unwrap();
@@ -206,10 +178,7 @@ mod tests {
 
   #[test]
   fn challenge_file_roundtrip() {
-    let file = ChallengeFile {
-      name: "data.enc".into(),
-      url: "/files/1234/data.enc".into(),
-    };
+    let file = ChallengeFile { name: "data.enc".into(), url: "/files/1234/data.enc".into() };
     let json = serde_json::to_string(&file).unwrap();
     let deserialized: ChallengeFile = serde_json::from_str(&json).unwrap();
     assert_eq!(deserialized.name, "data.enc");
@@ -232,9 +201,7 @@ mod tests {
 
   #[test]
   fn submit_result_rate_limited_with_retry() {
-    let result = SubmitResult::RateLimited {
-      retry_after: Some(30),
-    };
+    let result = SubmitResult::RateLimited { retry_after: Some(30) };
     let json = serde_json::to_string(&result).unwrap();
     assert!(json.contains("30"));
     let deserialized: SubmitResult = serde_json::from_str(&json).unwrap();

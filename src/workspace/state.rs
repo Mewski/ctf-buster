@@ -134,25 +134,22 @@ pub fn update_sync(workspace_root: &Path, challenges: &[Challenge]) -> Result<()
   state.last_sync = Some(Utc::now());
 
   for c in challenges {
-    let entry = state
-      .challenges
-      .entry(c.name.to_lowercase())
-      .or_insert_with(|| ChallengeState {
-        id: c.id.clone(),
-        name: c.name.clone(),
-        category: c.category.clone(),
-        status: ChallengeStatus::Unsolved,
-        solved_at: None,
-        points: None,
-        flag: None,
-        description: None,
-        hints: None,
-        files: None,
-        tags: None,
-        details_fetched_at: None,
-        methodology: None,
-        tools_used: None,
-      });
+    let entry = state.challenges.entry(c.name.to_lowercase()).or_insert_with(|| ChallengeState {
+      id: c.id.clone(),
+      name: c.name.clone(),
+      category: c.category.clone(),
+      status: ChallengeStatus::Unsolved,
+      solved_at: None,
+      points: None,
+      flag: None,
+      description: None,
+      hints: None,
+      files: None,
+      tags: None,
+      details_fetched_at: None,
+      methodology: None,
+      tools_used: None,
+    });
 
     entry.id = c.id.clone();
     entry.name = c.name.clone();
@@ -174,25 +171,22 @@ pub fn update_sync_full(workspace_root: &Path, challenges: &[Challenge]) -> Resu
   let now = Utc::now();
 
   for c in challenges {
-    let entry = state
-      .challenges
-      .entry(c.name.to_lowercase())
-      .or_insert_with(|| ChallengeState {
-        id: c.id.clone(),
-        name: c.name.clone(),
-        category: c.category.clone(),
-        status: ChallengeStatus::Unsolved,
-        solved_at: None,
-        points: None,
-        flag: None,
-        description: None,
-        hints: None,
-        files: None,
-        tags: None,
-        details_fetched_at: None,
-        methodology: None,
-        tools_used: None,
-      });
+    let entry = state.challenges.entry(c.name.to_lowercase()).or_insert_with(|| ChallengeState {
+      id: c.id.clone(),
+      name: c.name.clone(),
+      category: c.category.clone(),
+      status: ChallengeStatus::Unsolved,
+      solved_at: None,
+      points: None,
+      flag: None,
+      description: None,
+      hints: None,
+      files: None,
+      tags: None,
+      details_fetched_at: None,
+      methodology: None,
+      tools_used: None,
+    });
 
     entry.id = c.id.clone();
     entry.name = c.name.clone();
@@ -209,26 +203,11 @@ pub fn update_sync_full(workspace_root: &Path, challenges: &[Challenge]) -> Resu
     }
     if !c.hints.is_empty() {
       entry.hints = Some(
-        c.hints
-          .iter()
-          .map(|h| CachedHint {
-            id: h.id.clone(),
-            content: h.content.clone(),
-            cost: h.cost,
-          })
-          .collect(),
+        c.hints.iter().map(|h| CachedHint { id: h.id.clone(), content: h.content.clone(), cost: h.cost }).collect(),
       );
     }
     if !c.files.is_empty() {
-      entry.files = Some(
-        c.files
-          .iter()
-          .map(|f| CachedFile {
-            name: f.name.clone(),
-            url: f.url.clone(),
-          })
-          .collect(),
-      );
+      entry.files = Some(c.files.iter().map(|f| CachedFile { name: f.name.clone(), url: f.url.clone() }).collect());
     }
     if !c.tags.is_empty() {
       entry.tags = Some(c.tags.clone());
@@ -252,11 +231,7 @@ pub fn merge_cached_details(challenges: &mut [Challenge], state: &WorkspaceState
         if let Some(hints) = &cached.hints {
           c.hints = hints
             .iter()
-            .map(|h| crate::platform::types::Hint {
-              id: h.id.clone(),
-              content: h.content.clone(),
-              cost: h.cost,
-            })
+            .map(|h| crate::platform::types::Hint { id: h.id.clone(), content: h.content.clone(), cost: h.cost })
             .collect();
         }
       }
@@ -264,10 +239,7 @@ pub fn merge_cached_details(challenges: &mut [Challenge], state: &WorkspaceState
         if let Some(files) = &cached.files {
           c.files = files
             .iter()
-            .map(|f| crate::platform::types::ChallengeFile {
-              name: f.name.clone(),
-              url: f.url.clone(),
-            })
+            .map(|f| crate::platform::types::ChallengeFile { name: f.name.clone(), url: f.url.clone() })
             .collect();
         }
       }
@@ -337,10 +309,7 @@ pub fn load_orchestration(workspace_root: &Path) -> Result<OrchestrationState> {
   Ok(state.orchestration)
 }
 
-pub fn update_orchestration(
-  workspace_root: &Path,
-  orchestration: OrchestrationState,
-) -> Result<()> {
+pub fn update_orchestration(workspace_root: &Path, orchestration: OrchestrationState) -> Result<()> {
   let mut state = load_state(workspace_root)?;
   state.orchestration = orchestration;
   write_state(workspace_root, &state)
@@ -405,10 +374,7 @@ mod tests {
     let dir = TempDir::new().unwrap();
     init_state(dir.path()).unwrap();
 
-    let challenges = vec![
-      make_challenge("1", "Test A", "crypto"),
-      make_challenge("2", "Test B", "web"),
-    ];
+    let challenges = vec![make_challenge("1", "Test A", "crypto"), make_challenge("2", "Test B", "web")];
     update_sync(dir.path(), &challenges).unwrap();
 
     let state = load_state(dir.path()).unwrap();
@@ -482,15 +448,10 @@ mod tests {
     let mut c = make_challenge("1", "Crypto 101", "crypto");
     c.description = "Solve this RSA problem".into();
     c.tags = vec!["easy".into()];
-    c.hints = vec![crate::platform::types::Hint {
-      id: "10".into(),
-      content: Some("Think about factoring".into()),
-      cost: 50,
-    }];
-    c.files = vec![crate::platform::types::ChallengeFile {
-      name: "challenge.py".into(),
-      url: "/files/challenge.py".into(),
-    }];
+    c.hints =
+      vec![crate::platform::types::Hint { id: "10".into(), content: Some("Think about factoring".into()), cost: 50 }];
+    c.files =
+      vec![crate::platform::types::ChallengeFile { name: "challenge.py".into(), url: "/files/challenge.py".into() }];
 
     update_sync_full(dir.path(), &[c]).unwrap();
 
@@ -577,51 +538,24 @@ mod tests {
 
   #[test]
   fn challenge_status_serialization() {
-    assert_eq!(
-      serde_json::to_string(&ChallengeStatus::Unsolved).unwrap(),
-      "\"unsolved\""
-    );
-    assert_eq!(
-      serde_json::to_string(&ChallengeStatus::InProgress).unwrap(),
-      "\"in_progress\""
-    );
-    assert_eq!(
-      serde_json::to_string(&ChallengeStatus::Solved).unwrap(),
-      "\"solved\""
-    );
+    assert_eq!(serde_json::to_string(&ChallengeStatus::Unsolved).unwrap(), "\"unsolved\"");
+    assert_eq!(serde_json::to_string(&ChallengeStatus::InProgress).unwrap(), "\"in_progress\"");
+    assert_eq!(serde_json::to_string(&ChallengeStatus::Solved).unwrap(), "\"solved\"");
   }
 
   #[test]
   fn cached_hint_equality() {
-    let h1 = CachedHint {
-      id: "1".into(),
-      content: Some("hint text".into()),
-      cost: 50,
-    };
-    let h2 = CachedHint {
-      id: "1".into(),
-      content: Some("hint text".into()),
-      cost: 50,
-    };
-    let h3 = CachedHint {
-      id: "1".into(),
-      content: None,
-      cost: 0,
-    };
+    let h1 = CachedHint { id: "1".into(), content: Some("hint text".into()), cost: 50 };
+    let h2 = CachedHint { id: "1".into(), content: Some("hint text".into()), cost: 50 };
+    let h3 = CachedHint { id: "1".into(), content: None, cost: 0 };
     assert_eq!(h1, h2);
     assert_ne!(h1, h3);
   }
 
   #[test]
   fn cached_file_equality() {
-    let f1 = CachedFile {
-      name: "data.bin".into(),
-      url: "/files/data.bin".into(),
-    };
-    let f2 = CachedFile {
-      name: "data.bin".into(),
-      url: "/files/data.bin".into(),
-    };
+    let f1 = CachedFile { name: "data.bin".into(), url: "/files/data.bin".into() };
+    let f2 = CachedFile { name: "data.bin".into(), url: "/files/data.bin".into() };
     assert_eq!(f1, f2);
   }
 
@@ -674,11 +608,7 @@ mod tests {
         points: None,
         flag: None,
         description: Some("A web challenge".into()),
-        hints: Some(vec![CachedHint {
-          id: "5".into(),
-          content: Some("Check headers".into()),
-          cost: 0,
-        }]),
+        hints: Some(vec![CachedHint { id: "5".into(), content: Some("Check headers".into()), cost: 0 }]),
         files: None,
         tags: Some(vec!["easy".into()]),
         details_fetched_at: None,
@@ -781,9 +711,7 @@ mod tests {
 
     // Set initial queue
     let orch1 = OrchestrationState {
-      queue: vec![
-        QueuedChallenge { name: "A".into(), category: "web".into(), priority: 10, points: 100 },
-      ],
+      queue: vec![QueuedChallenge { name: "A".into(), category: "web".into(), priority: 10, points: 100 }],
       in_progress: vec![],
       failed: vec![],
       updated_at: Some(Utc::now()),
@@ -820,9 +748,7 @@ mod tests {
 
     // Update orchestration
     let orch = OrchestrationState {
-      queue: vec![
-        QueuedChallenge { name: "Test".into(), category: "web".into(), priority: 10, points: 100 },
-      ],
+      queue: vec![QueuedChallenge { name: "Test".into(), category: "web".into(), priority: 10, points: 100 }],
       in_progress: vec![],
       failed: vec![],
       updated_at: Some(Utc::now()),
@@ -855,14 +781,8 @@ mod tests {
 
     let state = load_state(dir.path()).unwrap();
     let entry = &state.challenges["easy rsa"];
-    assert_eq!(
-      entry.methodology.as_deref(),
-      Some("Factored n using factordb, computed d, decrypted")
-    );
-    assert_eq!(
-      entry.tools_used.as_ref().unwrap(),
-      &["crypto_rsa_toolkit", "python"]
-    );
+    assert_eq!(entry.methodology.as_deref(), Some("Factored n using factordb, computed d, decrypted"));
+    assert_eq!(entry.tools_used.as_ref().unwrap(), &["crypto_rsa_toolkit", "python"]);
   }
 
   #[test]
@@ -932,12 +852,8 @@ mod tests {
     let dir = TempDir::new().unwrap();
     init_state(dir.path()).unwrap();
 
-    let mut orch = OrchestrationState {
-      queue: vec![],
-      in_progress: vec!["A".into(), "B".into()],
-      failed: vec![],
-      updated_at: None,
-    };
+    let mut orch =
+      OrchestrationState { queue: vec![], in_progress: vec!["A".into(), "B".into()], failed: vec![], updated_at: None };
 
     // Simulate "complete" action for A
     let name = "A";
@@ -985,9 +901,7 @@ mod tests {
     init_state(dir.path()).unwrap();
 
     let mut orch = OrchestrationState {
-      queue: vec![
-        QueuedChallenge { name: "Other".into(), category: "web".into(), priority: 10, points: 100 },
-      ],
+      queue: vec![QueuedChallenge { name: "Other".into(), category: "web".into(), priority: 10, points: 100 }],
       in_progress: vec![],
       failed: vec![FailedAttempt {
         name: "Hard Pwn".into(),
@@ -1002,12 +916,7 @@ mod tests {
     let name_lower = "hard pwn".to_lowercase();
     if let Some(pos) = orch.failed.iter().position(|f| f.name.to_lowercase() == name_lower) {
       let failed = orch.failed.remove(pos);
-      orch.queue.push(QueuedChallenge {
-        name: failed.name,
-        category: failed.category,
-        priority: -5,
-        points: 0,
-      });
+      orch.queue.push(QueuedChallenge { name: failed.name, category: failed.category, priority: -5, points: 0 });
     }
     orch.updated_at = Some(Utc::now());
     update_orchestration(dir.path(), orch).unwrap();
@@ -1058,9 +967,7 @@ mod tests {
     init_state(dir.path()).unwrap();
 
     let mut orch = OrchestrationState {
-      queue: vec![
-        QueuedChallenge { name: "A".into(), category: "crypto".into(), priority: 20, points: 100 },
-      ],
+      queue: vec![QueuedChallenge { name: "A".into(), category: "crypto".into(), priority: 20, points: 100 }],
       in_progress: vec![],
       failed: vec![FailedAttempt {
         name: "Failed One".into(),
@@ -1079,12 +986,10 @@ mod tests {
     if let Some(failed_pos) = orch.failed.iter().position(|f| f.name.to_lowercase() == name_lower) {
       let failed = orch.failed.remove(failed_pos);
       let max_priority = orch.queue.iter().map(|q| q.priority).max().unwrap_or(0);
-      orch.queue.insert(0, QueuedChallenge {
-        name: failed.name,
-        category: failed.category,
-        priority: max_priority + 100,
-        points: 0,
-      });
+      orch.queue.insert(
+        0,
+        QueuedChallenge { name: failed.name, category: failed.category, priority: max_priority + 100, points: 0 },
+      );
     }
     orch.updated_at = Some(Utc::now());
     update_orchestration(dir.path(), orch).unwrap();
@@ -1102,9 +1007,7 @@ mod tests {
     init_state(dir.path()).unwrap();
 
     let orch = OrchestrationState {
-      queue: vec![
-        QueuedChallenge { name: "A".into(), category: "crypto".into(), priority: 30, points: 100 },
-      ],
+      queue: vec![QueuedChallenge { name: "A".into(), category: "crypto".into(), priority: 30, points: 100 }],
       in_progress: vec!["B".into()],
       failed: vec![FailedAttempt {
         name: "C".into(),
@@ -1148,11 +1051,8 @@ mod tests {
       0
     };
 
-    let solve_bonus: i32 = if challenge.solves > 0 && (challenge.value as f64 / challenge.solves as f64) < 10.0 {
-      5
-    } else {
-      0
-    };
+    let solve_bonus: i32 =
+      if challenge.solves > 0 && (challenge.value as f64 / challenge.solves as f64) < 10.0 { 5 } else { 0 };
 
     let mut priority = category_score + difficulty_bonus + solve_bonus;
 
@@ -1167,9 +1067,16 @@ mod tests {
   fn scoring_crypto_high_solves() {
     let empty = std::collections::HashSet::new();
     let c = Challenge {
-      id: "1".into(), name: "Easy RSA".into(), category: "crypto".into(),
-      description: String::new(), value: 100, solves: 60, solved_by_me: false,
-      files: vec![], tags: vec![], hints: vec![],
+      id: "1".into(),
+      name: "Easy RSA".into(),
+      category: "crypto".into(),
+      description: String::new(),
+      value: 100,
+      solves: 60,
+      solved_by_me: false,
+      files: vec![],
+      tags: vec![],
+      hints: vec![],
     };
     // crypto=10 + difficulty(>50)=20 + solve_bonus(100/60<10)=5 = 35
     assert_eq!(score_challenge(&c, &empty), 35);
@@ -1179,9 +1086,16 @@ mod tests {
   fn scoring_pwn_low_solves() {
     let empty = std::collections::HashSet::new();
     let c = Challenge {
-      id: "2".into(), name: "Hard Exploit".into(), category: "pwn".into(),
-      description: String::new(), value: 500, solves: 5, solved_by_me: false,
-      files: vec![], tags: vec![], hints: vec![],
+      id: "2".into(),
+      name: "Hard Exploit".into(),
+      category: "pwn".into(),
+      description: String::new(),
+      value: 500,
+      solves: 5,
+      solved_by_me: false,
+      files: vec![],
+      tags: vec![],
+      hints: vec![],
     };
     // pwn=2 + difficulty(<20)=0 + solve_bonus(500/5=100, not<10)=0 = 2
     assert_eq!(score_challenge(&c, &empty), 2);
@@ -1191,9 +1105,16 @@ mod tests {
   fn scoring_web_medium_solves() {
     let empty = std::collections::HashSet::new();
     let c = Challenge {
-      id: "3".into(), name: "SQLi Basic".into(), category: "web".into(),
-      description: String::new(), value: 100, solves: 35, solved_by_me: false,
-      files: vec![], tags: vec![], hints: vec![],
+      id: "3".into(),
+      name: "SQLi Basic".into(),
+      category: "web".into(),
+      description: String::new(),
+      value: 100,
+      solves: 35,
+      solved_by_me: false,
+      files: vec![],
+      tags: vec![],
+      hints: vec![],
     };
     // web=8 + difficulty(20-50)=10 + solve_bonus(100/35≈2.8<10)=5 = 23
     assert_eq!(score_challenge(&c, &empty), 23);
@@ -1205,9 +1126,16 @@ mod tests {
     failed.insert("hard rev".to_string());
 
     let c = Challenge {
-      id: "4".into(), name: "Hard Rev".into(), category: "rev".into(),
-      description: String::new(), value: 400, solves: 25, solved_by_me: false,
-      files: vec![], tags: vec![], hints: vec![],
+      id: "4".into(),
+      name: "Hard Rev".into(),
+      category: "rev".into(),
+      description: String::new(),
+      value: 400,
+      solves: 25,
+      solved_by_me: false,
+      files: vec![],
+      tags: vec![],
+      hints: vec![],
     };
     // rev=6 + difficulty(20-50)=10 + solve_bonus(400/25=16, not<10)=0 - failed=10 = 6
     assert_eq!(score_challenge(&c, &failed), 6);
@@ -1217,9 +1145,16 @@ mod tests {
   fn scoring_unknown_category_defaults_to_misc() {
     let empty = std::collections::HashSet::new();
     let c = Challenge {
-      id: "5".into(), name: "Random".into(), category: "osint".into(),
-      description: String::new(), value: 50, solves: 100, solved_by_me: false,
-      files: vec![], tags: vec![], hints: vec![],
+      id: "5".into(),
+      name: "Random".into(),
+      category: "osint".into(),
+      description: String::new(),
+      value: 50,
+      solves: 100,
+      solved_by_me: false,
+      files: vec![],
+      tags: vec![],
+      hints: vec![],
     };
     // unknown(osint)=4 + difficulty(>50)=20 + solve_bonus(50/100=0.5<10)=5 = 29
     assert_eq!(score_challenge(&c, &empty), 29);
@@ -1229,14 +1164,28 @@ mod tests {
   fn scoring_forensics_matches_crypto_priority() {
     let empty = std::collections::HashSet::new();
     let crypto = Challenge {
-      id: "1".into(), name: "A".into(), category: "crypto".into(),
-      description: String::new(), value: 100, solves: 10, solved_by_me: false,
-      files: vec![], tags: vec![], hints: vec![],
+      id: "1".into(),
+      name: "A".into(),
+      category: "crypto".into(),
+      description: String::new(),
+      value: 100,
+      solves: 10,
+      solved_by_me: false,
+      files: vec![],
+      tags: vec![],
+      hints: vec![],
     };
     let forensics = Challenge {
-      id: "2".into(), name: "B".into(), category: "forensics".into(),
-      description: String::new(), value: 100, solves: 10, solved_by_me: false,
-      files: vec![], tags: vec![], hints: vec![],
+      id: "2".into(),
+      name: "B".into(),
+      category: "forensics".into(),
+      description: String::new(),
+      value: 100,
+      solves: 10,
+      solved_by_me: false,
+      files: vec![],
+      tags: vec![],
+      hints: vec![],
     };
     assert_eq!(score_challenge(&crypto, &empty), score_challenge(&forensics, &empty));
   }
@@ -1245,9 +1194,16 @@ mod tests {
   fn scoring_category_aliases() {
     let empty = std::collections::HashSet::new();
     let make = |cat: &str| Challenge {
-      id: "1".into(), name: "T".into(), category: cat.into(),
-      description: String::new(), value: 100, solves: 10, solved_by_me: false,
-      files: vec![], tags: vec![], hints: vec![],
+      id: "1".into(),
+      name: "T".into(),
+      category: cat.into(),
+      description: String::new(),
+      value: 100,
+      solves: 10,
+      solved_by_me: false,
+      files: vec![],
+      tags: vec![],
+      hints: vec![],
     };
     // All pwn aliases should score the same
     assert_eq!(score_challenge(&make("pwn"), &empty), score_challenge(&make("binary exploitation"), &empty));
@@ -1267,9 +1223,16 @@ mod tests {
   fn scoring_difficulty_bonus_boundary_at_20() {
     let empty = std::collections::HashSet::new();
     let make = |solves: u32| Challenge {
-      id: "1".into(), name: "T".into(), category: "misc".into(),
-      description: String::new(), value: 200, solves, solved_by_me: false,
-      files: vec![], tags: vec![], hints: vec![],
+      id: "1".into(),
+      name: "T".into(),
+      category: "misc".into(),
+      description: String::new(),
+      value: 200,
+      solves,
+      solved_by_me: false,
+      files: vec![],
+      tags: vec![],
+      hints: vec![],
     };
     // 19 solves → 0 bonus, 20 solves → 10 bonus
     let score_19 = score_challenge(&make(19), &empty);
@@ -1281,9 +1244,16 @@ mod tests {
   fn scoring_difficulty_bonus_boundary_at_51() {
     let empty = std::collections::HashSet::new();
     let make = |solves: u32| Challenge {
-      id: "1".into(), name: "T".into(), category: "misc".into(),
-      description: String::new(), value: 1000, solves, solved_by_me: false,
-      files: vec![], tags: vec![], hints: vec![],
+      id: "1".into(),
+      name: "T".into(),
+      category: "misc".into(),
+      description: String::new(),
+      value: 1000,
+      solves,
+      solved_by_me: false,
+      files: vec![],
+      tags: vec![],
+      hints: vec![],
     };
     // 50 solves → 10 bonus, 51 solves → 20 bonus
     let score_50 = score_challenge(&make(50), &empty);
@@ -1296,15 +1266,29 @@ mod tests {
     let empty = std::collections::HashSet::new();
     // value/solves < 10 → bonus 5
     let with_bonus = Challenge {
-      id: "1".into(), name: "T".into(), category: "misc".into(),
-      description: String::new(), value: 90, solves: 10, solved_by_me: false,
-      files: vec![], tags: vec![], hints: vec![],
+      id: "1".into(),
+      name: "T".into(),
+      category: "misc".into(),
+      description: String::new(),
+      value: 90,
+      solves: 10,
+      solved_by_me: false,
+      files: vec![],
+      tags: vec![],
+      hints: vec![],
     };
     // value/solves = 10 → no bonus
     let without_bonus = Challenge {
-      id: "1".into(), name: "T".into(), category: "misc".into(),
-      description: String::new(), value: 100, solves: 10, solved_by_me: false,
-      files: vec![], tags: vec![], hints: vec![],
+      id: "1".into(),
+      name: "T".into(),
+      category: "misc".into(),
+      description: String::new(),
+      value: 100,
+      solves: 10,
+      solved_by_me: false,
+      files: vec![],
+      tags: vec![],
+      hints: vec![],
     };
     assert_eq!(score_challenge(&with_bonus, &empty) - score_challenge(&without_bonus, &empty), 5);
   }
@@ -1313,9 +1297,16 @@ mod tests {
   fn scoring_zero_solves_no_bonus() {
     let empty = std::collections::HashSet::new();
     let c = Challenge {
-      id: "1".into(), name: "T".into(), category: "misc".into(),
-      description: String::new(), value: 0, solves: 0, solved_by_me: false,
-      files: vec![], tags: vec![], hints: vec![],
+      id: "1".into(),
+      name: "T".into(),
+      category: "misc".into(),
+      description: String::new(),
+      value: 0,
+      solves: 0,
+      solved_by_me: false,
+      files: vec![],
+      tags: vec![],
+      hints: vec![],
     };
     // misc=4 + difficulty(0<20)=0 + solve_bonus(0 solves → no bonus)=0 = 4
     assert_eq!(score_challenge(&c, &empty), 4);
@@ -1325,12 +1316,7 @@ mod tests {
 
   #[test]
   fn queued_challenge_roundtrip() {
-    let qc = QueuedChallenge {
-      name: "Easy RSA".into(),
-      category: "crypto".into(),
-      priority: 35,
-      points: 100,
-    };
+    let qc = QueuedChallenge { name: "Easy RSA".into(), category: "crypto".into(), priority: 35, points: 100 };
     let json = serde_json::to_string(&qc).unwrap();
     let deserialized: QueuedChallenge = serde_json::from_str(&json).unwrap();
     assert_eq!(deserialized, qc);
@@ -1352,9 +1338,7 @@ mod tests {
   #[test]
   fn orchestration_state_roundtrip() {
     let orch = OrchestrationState {
-      queue: vec![
-        QueuedChallenge { name: "A".into(), category: "crypto".into(), priority: 30, points: 100 },
-      ],
+      queue: vec![QueuedChallenge { name: "A".into(), category: "crypto".into(), priority: 30, points: 100 }],
       in_progress: vec!["B".into()],
       failed: vec![FailedAttempt {
         name: "C".into(),
@@ -1397,19 +1381,34 @@ mod tests {
     state.challenges.insert(
       "test".into(),
       ChallengeState {
-        id: "1".into(), name: "test".into(), category: "web".into(),
-        status: ChallengeStatus::Unsolved, solved_at: None, points: None, flag: None,
+        id: "1".into(),
+        name: "test".into(),
+        category: "web".into(),
+        status: ChallengeStatus::Unsolved,
+        solved_at: None,
+        points: None,
+        flag: None,
         description: Some("Old description".into()),
-        hints: None, files: None, tags: None, details_fetched_at: None,
-        methodology: None, tools_used: None,
+        hints: None,
+        files: None,
+        tags: None,
+        details_fetched_at: None,
+        methodology: None,
+        tools_used: None,
       },
     );
 
     let mut challenges = vec![Challenge {
-      id: "1".into(), name: "test".into(), category: "web".into(),
+      id: "1".into(),
+      name: "test".into(),
+      category: "web".into(),
       description: "Platform description".into(),
-      value: 100, solves: 5, solved_by_me: false,
-      files: vec![], tags: vec![], hints: vec![],
+      value: 100,
+      solves: 5,
+      solved_by_me: false,
+      files: vec![],
+      tags: vec![],
+      hints: vec![],
     }];
 
     merge_cached_details(&mut challenges, &state);
@@ -1423,19 +1422,34 @@ mod tests {
     state.challenges.insert(
       "test".into(),
       ChallengeState {
-        id: "1".into(), name: "test".into(), category: "web".into(),
-        status: ChallengeStatus::Unsolved, solved_at: None, points: None, flag: None,
+        id: "1".into(),
+        name: "test".into(),
+        category: "web".into(),
+        status: ChallengeStatus::Unsolved,
+        solved_at: None,
+        points: None,
+        flag: None,
         description: Some("Cached description".into()),
-        hints: None, files: None, tags: None, details_fetched_at: None,
-        methodology: None, tools_used: None,
+        hints: None,
+        files: None,
+        tags: None,
+        details_fetched_at: None,
+        methodology: None,
+        tools_used: None,
       },
     );
 
     let mut challenges = vec![Challenge {
-      id: "1".into(), name: "test".into(), category: "web".into(),
+      id: "1".into(),
+      name: "test".into(),
+      category: "web".into(),
       description: String::new(), // empty
-      value: 100, solves: 5, solved_by_me: false,
-      files: vec![], tags: vec![], hints: vec![],
+      value: 100,
+      solves: 5,
+      solved_by_me: false,
+      files: vec![],
+      tags: vec![],
+      hints: vec![],
     }];
 
     merge_cached_details(&mut challenges, &state);

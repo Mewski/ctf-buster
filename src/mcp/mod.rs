@@ -4,10 +4,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use rmcp::{
-  ErrorData as McpError, ServerHandler,
   handler::server::{router::tool::ToolRouter, wrapper::Parameters},
   model::{CallToolResult, Content, ServerCapabilities, ServerInfo},
-  tool, tool_handler, tool_router,
+  tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler,
 };
 
 use crate::config::types::WorkspaceConfig;
@@ -29,17 +28,8 @@ pub struct McpServer {
 
 #[tool_router]
 impl McpServer {
-  pub fn new(
-    platform: Arc<dyn Platform>,
-    workspace_root: PathBuf,
-    workspace_config: WorkspaceConfig,
-  ) -> Self {
-    Self {
-      platform,
-      workspace_root,
-      workspace_config,
-      tool_router: Self::tool_router(),
-    }
+  pub fn new(platform: Arc<dyn Platform>, workspace_root: PathBuf, workspace_config: WorkspaceConfig) -> Self {
+    Self { platform, workspace_root, workspace_config, tool_router: Self::tool_router() }
   }
 
   #[tool(description = "Get info about the authenticated team/user — name, score, rank")]
@@ -52,10 +42,7 @@ impl McpServer {
   #[tool(
     description = "List CTF challenges with optional filters. Returns challenges with cached descriptions/hints when available."
   )]
-  async fn ctf_challenges(
-    &self,
-    Parameters(params): Parameters<ChallengesParams>,
-  ) -> Result<CallToolResult, McpError> {
+  async fn ctf_challenges(&self, Parameters(params): Parameters<ChallengesParams>) -> Result<CallToolResult, McpError> {
     let mut challenges = self.platform.challenges().await.map_err(to_mcp_error)?;
 
     // Merge cached details from state
@@ -88,9 +75,7 @@ impl McpServer {
     Parameters(params): Parameters<ChallengeDetailParams>,
   ) -> Result<CallToolResult, McpError> {
     let challenges = self.platform.challenges().await.map_err(to_mcp_error)?;
-    let challenge = resolve_challenge(&*self.platform, &params.id_or_name, &challenges)
-      .await
-      .map_err(to_mcp_error)?;
+    let challenge = resolve_challenge(&*self.platform, &params.id_or_name, &challenges).await.map_err(to_mcp_error)?;
     let json = serde_json::to_string_pretty(&challenge).map_err(to_mcp_error)?;
     Ok(CallToolResult::success(vec![Content::text(json)]))
   }
@@ -113,29 +98,13 @@ impl McpServer {
     }
 
     let challenges = self.platform.challenges().await.map_err(to_mcp_error)?;
-    let challenge = resolve_challenge(&*self.platform, challenge_name, &challenges)
-      .await
-      .map_err(to_mcp_error)?;
+    let challenge = resolve_challenge(&*self.platform, challenge_name, &challenges).await.map_err(to_mcp_error)?;
 
-    let result = self
-      .platform
-      .submit(&challenge.id, flag)
-      .await
-      .map_err(to_mcp_error)?;
+    let result = self.platform.submit(&challenge.id, flag).await.map_err(to_mcp_error)?;
 
     // Update local state on success
-    if let crate::platform::types::SubmitResult::Correct {
-      challenge: ref name,
-      points,
-    } = result
-    {
-      let _ = state::mark_solved(
-        &self.workspace_root,
-        &challenge.id,
-        name,
-        points,
-        flag,
-      );
+    if let crate::platform::types::SubmitResult::Correct { challenge: ref name, points } = result {
+      let _ = state::mark_solved(&self.workspace_root, &challenge.id, name, points, flag);
     }
 
     let json = serde_json::to_string_pretty(&result).map_err(to_mcp_error)?;
@@ -143,15 +112,8 @@ impl McpServer {
   }
 
   #[tool(description = "Show the competition scoreboard with team rankings")]
-  async fn ctf_scoreboard(
-    &self,
-    Parameters(params): Parameters<ScoreboardParams>,
-  ) -> Result<CallToolResult, McpError> {
-    let entries = self
-      .platform
-      .scoreboard(params.limit)
-      .await
-      .map_err(to_mcp_error)?;
+  async fn ctf_scoreboard(&self, Parameters(params): Parameters<ScoreboardParams>) -> Result<CallToolResult, McpError> {
+    let entries = self.platform.scoreboard(params.limit).await.map_err(to_mcp_error)?;
     let json = serde_json::to_string_pretty(&entries).map_err(to_mcp_error)?;
     Ok(CallToolResult::success(vec![Content::text(json)]))
   }
@@ -159,25 +121,20 @@ impl McpServer {
   #[tool(
     description = "Sync challenges from the CTF platform — creates workspace directories, downloads files, and updates local state. Use full=true to also fetch descriptions/hints for all challenges."
   )]
-  async fn ctf_sync(
-    &self,
-    Parameters(params): Parameters<SyncParams>,
-  ) -> Result<CallToolResult, McpError> {
+  async fn ctf_sync(&self, Parameters(params): Parameters<SyncParams>) -> Result<CallToolResult, McpError> {
     let challenges = self.platform.challenges().await.map_err(to_mcp_error)?;
 
     let mut new_count = 0u32;
     let mut file_count = 0u32;
 
     for challenge in &challenges {
-      let created =
-        scaffold::scaffold_challenge(&self.workspace_root, challenge, &self.workspace_config.scaffold)
-          .map_err(to_mcp_error)?;
+      let created = scaffold::scaffold_challenge(&self.workspace_root, challenge, &self.workspace_config.scaffold)
+        .map_err(to_mcp_error)?;
       if created {
         new_count += 1;
       }
 
-      let challenge_dir =
-        scaffold::challenge_dir(&self.workspace_root, challenge, &self.workspace_config.scaffold);
+      let challenge_dir = scaffold::challenge_dir(&self.workspace_root, challenge, &self.workspace_config.scaffold);
       let dist_dir = challenge_dir.join("dist");
 
       for file in &challenge.files {
@@ -265,12 +222,8 @@ impl McpServer {
     let notif_count = notifications.len();
     let _ = state::update_notifications(&self.workspace_root, &notifications);
 
-    let mut summary = format!(
-      "Synced {} challenges ({} new, {} files downloaded)",
-      challenges.len(),
-      new_count,
-      file_count,
-    );
+    let mut summary =
+      format!("Synced {} challenges ({} new, {} files downloaded)", challenges.len(), new_count, file_count,);
     if is_full {
       summary.push_str(" with full details cached");
     }
@@ -289,18 +242,13 @@ impl McpServer {
     Parameters(params): Parameters<DownloadFilesParams>,
   ) -> Result<CallToolResult, McpError> {
     let challenges = self.platform.challenges().await.map_err(to_mcp_error)?;
-    let challenge = resolve_challenge(&*self.platform, &params.challenge, &challenges)
-      .await
-      .map_err(to_mcp_error)?;
+    let challenge = resolve_challenge(&*self.platform, &params.challenge, &challenges).await.map_err(to_mcp_error)?;
 
     if challenge.files.is_empty() {
-      return Ok(CallToolResult::success(vec![Content::text(
-        "No files attached to this challenge.",
-      )]));
+      return Ok(CallToolResult::success(vec![Content::text("No files attached to this challenge.")]));
     }
 
-    let challenge_dir =
-      scaffold::challenge_dir(&self.workspace_root, &challenge, &self.workspace_config.scaffold);
+    let challenge_dir = scaffold::challenge_dir(&self.workspace_root, &challenge, &self.workspace_config.scaffold);
     let dist_dir = challenge_dir.join("dist");
     std::fs::create_dir_all(&dist_dir).map_err(to_mcp_error)?;
 
@@ -308,11 +256,7 @@ impl McpServer {
     for file in &challenge.files {
       let safe_name = scaffold::sanitize_filename(&file.name);
       let dest = dist_dir.join(&safe_name);
-      self
-        .platform
-        .download_file(file, &dest)
-        .await
-        .map_err(to_mcp_error)?;
+      self.platform.download_file(file, &dest).await.map_err(to_mcp_error)?;
       downloaded.push(dest.display().to_string());
     }
 
@@ -320,9 +264,7 @@ impl McpServer {
     Ok(CallToolResult::success(vec![Content::text(json)]))
   }
 
-  #[tool(
-    description = "Get workspace status — team info, score, challenge counts per category, solve progress"
-  )]
+  #[tool(description = "Get workspace status — team info, score, challenge counts per category, solve progress")]
   async fn ctf_workspace_status(&self) -> Result<CallToolResult, McpError> {
     let info = self.platform.whoami().await.map_err(to_mcp_error)?;
     let challenges = self.platform.challenges().await.map_err(to_mcp_error)?;
@@ -330,14 +272,9 @@ impl McpServer {
     let total = challenges.len();
     let solved: usize = challenges.iter().filter(|c| c.solved_by_me).count();
     let total_points: u32 = challenges.iter().map(|c| c.value).sum();
-    let solved_points: u32 = challenges
-      .iter()
-      .filter(|c| c.solved_by_me)
-      .map(|c| c.value)
-      .sum();
+    let solved_points: u32 = challenges.iter().filter(|c| c.solved_by_me).map(|c| c.value).sum();
 
-    let mut categories: std::collections::BTreeMap<&str, (u32, u32, u32)> =
-      std::collections::BTreeMap::new();
+    let mut categories: std::collections::BTreeMap<&str, (u32, u32, u32)> = std::collections::BTreeMap::new();
     for c in &challenges {
       let entry = categories.entry(&c.category).or_default();
       entry.1 += 1;
@@ -389,15 +326,10 @@ impl McpServer {
         if let Some(hints) = &cs.hints {
           for h in hints {
             if h.id == hint_id && h.cost > 0 {
-              let hint = self
-                .platform
-                .unlock_hint(hint_id)
-                .await
-                .map_err(to_mcp_error)?;
+              let hint = self.platform.unlock_hint(hint_id).await.map_err(to_mcp_error)?;
               let mut result = serde_json::to_value(&hint).map_err(to_mcp_error)?;
-              result["warning"] = serde_json::json!(
-                format!("This hint cost {} points — your team score has been reduced", h.cost)
-              );
+              result["warning"] =
+                serde_json::json!(format!("This hint cost {} points — your team score has been reduced", h.cost));
               let json = serde_json::to_string_pretty(&result).map_err(to_mcp_error)?;
               return Ok(CallToolResult::success(vec![Content::text(json)]));
             }
@@ -406,11 +338,7 @@ impl McpServer {
       }
     }
 
-    let hint = self
-      .platform
-      .unlock_hint(hint_id)
-      .await
-      .map_err(to_mcp_error)?;
+    let hint = self.platform.unlock_hint(hint_id).await.map_err(to_mcp_error)?;
     let json = serde_json::to_string_pretty(&hint).map_err(to_mcp_error)?;
     Ok(CallToolResult::success(vec![Content::text(json)]))
   }
@@ -435,32 +363,24 @@ impl McpServer {
 
     match params.action.as_str() {
       "set_queue" => {
-        let json_str = params
-          .queue_json
-          .ok_or_else(|| McpError::invalid_params("queue_json required for set_queue", None))?;
-        let queue: Vec<state::QueuedChallenge> =
-          serde_json::from_str(&json_str).map_err(to_mcp_error)?;
+        let json_str =
+          params.queue_json.ok_or_else(|| McpError::invalid_params("queue_json required for set_queue", None))?;
+        let queue: Vec<state::QueuedChallenge> = serde_json::from_str(&json_str).map_err(to_mcp_error)?;
         orch.queue = queue;
       }
       "start" => {
-        let name = params
-          .challenge
-          .ok_or_else(|| McpError::invalid_params("challenge required for start", None))?;
+        let name = params.challenge.ok_or_else(|| McpError::invalid_params("challenge required for start", None))?;
         orch.queue.retain(|q| q.name != name);
         if !orch.in_progress.contains(&name) {
           orch.in_progress.push(name);
         }
       }
       "complete" => {
-        let name = params
-          .challenge
-          .ok_or_else(|| McpError::invalid_params("challenge required for complete", None))?;
+        let name = params.challenge.ok_or_else(|| McpError::invalid_params("challenge required for complete", None))?;
         orch.in_progress.retain(|n| n != &name);
       }
       "fail" => {
-        let name = params
-          .challenge
-          .ok_or_else(|| McpError::invalid_params("challenge required for fail", None))?;
+        let name = params.challenge.ok_or_else(|| McpError::invalid_params("challenge required for fail", None))?;
         orch.in_progress.retain(|n| n != &name);
         orch.failed.push(state::FailedAttempt {
           name,
@@ -470,9 +390,8 @@ impl McpServer {
         });
       }
       "prioritize" => {
-        let name = params
-          .challenge
-          .ok_or_else(|| McpError::invalid_params("challenge required for prioritize", None))?;
+        let name =
+          params.challenge.ok_or_else(|| McpError::invalid_params("challenge required for prioritize", None))?;
         // Find the challenge in queue, remove it, give it max priority, insert at front
         let name_lower = name.to_lowercase();
         if let Some(pos) = orch.queue.iter().position(|q| q.name.to_lowercase() == name_lower) {
@@ -486,16 +405,17 @@ impl McpServer {
           if let Some(failed_pos) = orch.failed.iter().position(|f| f.name.to_lowercase() == name_lower) {
             let failed = orch.failed.remove(failed_pos);
             let max_priority = orch.queue.iter().map(|q| q.priority).max().unwrap_or(0);
-            orch.queue.insert(0, state::QueuedChallenge {
-              name: failed.name,
-              category: failed.category,
-              priority: max_priority + 100,
-              points: 0, // Unknown from failed state; auto_queue will fix on next run
-            });
+            orch.queue.insert(
+              0,
+              state::QueuedChallenge {
+                name: failed.name,
+                category: failed.category,
+                priority: max_priority + 100,
+                points: 0, // Unknown from failed state; auto_queue will fix on next run
+              },
+            );
           } else if orch.in_progress.iter().any(|n| n.to_lowercase() == name_lower) {
-            return Ok(CallToolResult::success(vec![Content::text(format!(
-              "'{}' is already in progress.", name
-            ))]));
+            return Ok(CallToolResult::success(vec![Content::text(format!("'{}' is already in progress.", name))]));
           } else {
             return Err(McpError::invalid_params(
               format!("Challenge '{}' not found in queue or failed list.", name),
@@ -505,9 +425,7 @@ impl McpServer {
         }
       }
       "retry" => {
-        let name = params
-          .challenge
-          .ok_or_else(|| McpError::invalid_params("challenge required for retry", None))?;
+        let name = params.challenge.ok_or_else(|| McpError::invalid_params("challenge required for retry", None))?;
         // Move from failed back to queue with reduced priority
         let name_lower = name.to_lowercase();
         if let Some(pos) = orch.failed.iter().position(|f| f.name.to_lowercase() == name_lower) {
@@ -519,10 +437,7 @@ impl McpServer {
             points: 0,
           });
         } else {
-          return Err(McpError::invalid_params(
-            format!("Challenge '{}' not in the failed list.", name),
-            None,
-          ));
+          return Err(McpError::invalid_params(format!("Challenge '{}' not in the failed list.", name), None));
         }
       }
       "clear" => {
@@ -546,11 +461,7 @@ impl McpServer {
 
   #[tool(description = "Get competition notifications/announcements from the CTF platform")]
   async fn ctf_notifications(&self) -> Result<CallToolResult, McpError> {
-    let notifications = self
-      .platform
-      .notifications()
-      .await
-      .map_err(to_mcp_error)?;
+    let notifications = self.platform.notifications().await.map_err(to_mcp_error)?;
 
     // Update cached state
     let _ = state::update_notifications(&self.workspace_root, &notifications);
@@ -562,10 +473,7 @@ impl McpServer {
   #[tool(
     description = "Auto-score and queue all unsolved challenges by priority. Implements the scoring algorithm: category_score (crypto/forensics +10, web +8, rev +6, misc +4, pwn +2) + difficulty_bonus (>50 solves: +20, 20-50: +10, <20: +0) + solve_bonus (points/solves < 10: +5). Replaces the current queue. Call this after ctf_sync to automatically prioritize what to solve next."
   )]
-  async fn ctf_auto_queue(
-    &self,
-    Parameters(params): Parameters<AutoQueueParams>,
-  ) -> Result<CallToolResult, McpError> {
+  async fn ctf_auto_queue(&self, Parameters(params): Parameters<AutoQueueParams>) -> Result<CallToolResult, McpError> {
     // Get current challenges from platform
     let challenges = self.platform.challenges().await.map_err(to_mcp_error)?;
 
@@ -579,21 +487,12 @@ impl McpServer {
     let orch = state::load_orchestration(&self.workspace_root).map_err(to_mcp_error)?;
 
     // Skip solved and already in-progress challenges
-    let in_progress_names: std::collections::HashSet<String> = orch
-      .in_progress
-      .iter()
-      .map(|n| n.to_lowercase())
-      .collect();
-    let unsolved: Vec<_> = challenges
-      .iter()
-      .filter(|c| !c.solved_by_me && !in_progress_names.contains(&c.name.to_lowercase()))
-      .collect();
+    let in_progress_names: std::collections::HashSet<String> =
+      orch.in_progress.iter().map(|n| n.to_lowercase()).collect();
+    let unsolved: Vec<_> =
+      challenges.iter().filter(|c| !c.solved_by_me && !in_progress_names.contains(&c.name.to_lowercase())).collect();
 
-    let failed_names: std::collections::HashSet<String> = orch
-      .failed
-      .iter()
-      .map(|f| f.name.to_lowercase())
-      .collect();
+    let failed_names: std::collections::HashSet<String> = orch.failed.iter().map(|f| f.name.to_lowercase()).collect();
 
     // Score each challenge
     let mut scored: Vec<state::QueuedChallenge> = unsolved
@@ -618,11 +517,7 @@ impl McpServer {
           0
         };
 
-        let solve_bonus: i32 = if c.solves > 0 && (c.value as f64 / c.solves as f64) < 10.0 {
-          5
-        } else {
-          0
-        };
+        let solve_bonus: i32 = if c.solves > 0 && (c.value as f64 / c.solves as f64) < 10.0 { 5 } else { 0 };
 
         let mut priority = category_score + difficulty_bonus + solve_bonus;
 
@@ -631,12 +526,7 @@ impl McpServer {
           priority -= 10;
         }
 
-        state::QueuedChallenge {
-          name: c.name.clone(),
-          category: c.category.clone(),
-          priority,
-          points: c.value,
-        }
+        state::QueuedChallenge { name: c.name.clone(), category: c.category.clone(), priority, points: c.value }
       })
       .collect();
 
@@ -686,7 +576,10 @@ impl McpServer {
         // Not in queue — check if it exists in state at all
         if ws_state.challenges.contains_key(&name_lower) {
           return Err(McpError::invalid_params(
-            format!("Challenge '{}' exists but is not in the queue. Run ctf_auto_queue first, or it may already be solved.", name),
+            format!(
+              "Challenge '{}' exists but is not in the queue. Run ctf_auto_queue first, or it may already be solved.",
+              name
+            ),
             None,
           ));
         }
@@ -701,9 +594,7 @@ impl McpServer {
     };
 
     if targets.is_empty() {
-      return Ok(CallToolResult::success(vec![Content::text(
-        "Queue is empty. Run ctf_auto_queue to populate it.",
-      )]));
+      return Ok(CallToolResult::success(vec![Content::text("Queue is empty. Run ctf_auto_queue to populate it.")]));
     }
 
     // Auto-mark selected challenges as in_progress
@@ -724,17 +615,11 @@ impl McpServer {
       let description = cached
         .and_then(|c| c.description.as_deref())
         .unwrap_or("(no description cached — run ctf_sync with full=true)");
-      let files: Vec<String> = cached
-        .and_then(|c| c.files.as_ref())
-        .map(|f| f.iter().map(|ff| ff.name.clone()).collect())
-        .unwrap_or_default();
+      let files: Vec<String> =
+        cached.and_then(|c| c.files.as_ref()).map(|f| f.iter().map(|ff| ff.name.clone()).collect()).unwrap_or_default();
       let hints: Vec<String> = cached
         .and_then(|c| c.hints.as_ref())
-        .map(|h| {
-          h.iter()
-            .filter_map(|hh| hh.content.clone())
-            .collect()
-        })
+        .map(|h| h.iter().filter_map(|hh| hh.content.clone()).collect())
         .unwrap_or_default();
 
       // Determine recommended model based on category, difficulty, and retry status
@@ -744,7 +629,8 @@ impl McpServer {
       let recommended_model = if is_retry || target.points > 300 {
         // Retries and hard challenges need deep reasoning
         "opus"
-      } else if matches!(cat_lower.as_str(),
+      } else if matches!(
+        cat_lower.as_str(),
         "crypto" | "cryptography" | "pwn" | "binary exploitation" | "exploitation" | "pwnable"
       ) {
         // Crypto (math reasoning) and pwn (exploit chains) benefit from opus
@@ -805,24 +691,15 @@ Use forensics_file_triage on any downloaded files to determine content type, the
 - Memory dumps: forensics_volatility",
       };
 
-      let files_str = if files.is_empty() {
-        "None attached".to_string()
-      } else {
-        files.join(", ")
-      };
+      let files_str = if files.is_empty() { "None attached".to_string() } else { files.join(", ") };
 
-      let hints_str = if hints.is_empty() {
-        String::new()
-      } else {
-        format!("\n   Hints: {}", hints.join("; "))
-      };
+      let hints_str = if hints.is_empty() { String::new() } else { format!("\n   Hints: {}", hints.join("; ")) };
 
       // Compute the challenge directory path
       let cat_dir = scaffold::sanitize_filename(&target.category.to_lowercase());
-      let name_dir = scaffold::sanitize_filename(&target.name.to_lowercase()
-        .chars()
-        .map(|c| if c == ' ' { '-' } else { c })
-        .collect::<String>());
+      let name_dir = scaffold::sanitize_filename(
+        &target.name.to_lowercase().chars().map(|c| if c == ' ' { '-' } else { c }).collect::<String>(),
+      );
       let challenge_dir = format!("{}/{}/{}", self.workspace_root.display(), cat_dir, name_dir);
 
       let retry_section = if is_retry {
@@ -909,34 +786,20 @@ Use forensics_file_triage on any downloaded files to determine content type, the
   #[tool(
     description = "Save a writeup for a solved challenge — records methodology and tools used, generates writeup.md in the challenge directory. Call this AFTER successfully submitting a flag."
   )]
-  async fn ctf_save_writeup(
-    &self,
-    Parameters(params): Parameters<WriteupParams>,
-  ) -> Result<CallToolResult, McpError> {
+  async fn ctf_save_writeup(&self, Parameters(params): Parameters<WriteupParams>) -> Result<CallToolResult, McpError> {
     let challenge_name = params.challenge.trim();
     if challenge_name.is_empty() {
-      return Err(McpError::invalid_params(
-        "Challenge name cannot be empty",
-        None,
-      ));
+      return Err(McpError::invalid_params("Challenge name cannot be empty", None));
     }
 
-    state::save_writeup(
-      &self.workspace_root,
-      challenge_name,
-      &params.methodology,
-      &params.tools_used,
-    )
-    .map_err(to_mcp_error)?;
+    state::save_writeup(&self.workspace_root, challenge_name, &params.methodology, &params.tools_used)
+      .map_err(to_mcp_error)?;
 
     let ws_state = state::load_state(&self.workspace_root).map_err(to_mcp_error)?;
     let key = challenge_name.to_lowercase();
     let challenge_state = ws_state.challenges.get(&key).ok_or_else(|| {
       McpError::invalid_params(
-        format!(
-          "Challenge '{}' not found in state. Submit the flag first.",
-          challenge_name
-        ),
+        format!("Challenge '{}' not found in state. Submit the flag first.", challenge_name),
         None,
       )
     })?;
@@ -955,11 +818,8 @@ Use forensics_file_triage on any downloaded files to determine content type, the
       tags: vec![],
       hints: vec![],
     };
-    let challenge_dir = scaffold::challenge_dir(
-      &self.workspace_root,
-      &pseudo_challenge,
-      &self.workspace_config.scaffold,
-    );
+    let challenge_dir =
+      scaffold::challenge_dir(&self.workspace_root, &pseudo_challenge, &self.workspace_config.scaffold);
 
     if challenge_dir.exists() {
       scaffold::save_writeup_file(&challenge_dir, &writeup_content).map_err(to_mcp_error)?;
@@ -976,9 +836,8 @@ Use forensics_file_triage on any downloaded files to determine content type, the
 #[tool_handler]
 impl ServerHandler for McpServer {
   fn get_info(&self) -> ServerInfo {
-    ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
-      .with_instructions(
-        "CTF competition assistant with two modes of operation:\n\n\
+    ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
+      "CTF competition assistant with two modes of operation:\n\n\
          \
          ORCHESTRATOR MODE (main agent coordinating a CTF):\n\
          1. ctf_sync(full=true) — fetch all challenges, descriptions, files, unlock free hints\n\
@@ -1000,8 +859,8 @@ impl ServerHandler for McpServer {
          Key tools: ctf_workspace_status (overview), ctf_challenges (browse), \
          ctf_sync (fetch from platform), ctf_auto_queue (score/prioritize), \
          ctf_generate_solve_prompt (create subagent prompts), ctf_queue_update (manage queue state)"
-          .to_string(),
-      )
+        .to_string(),
+    )
   }
 }
 
@@ -1029,9 +888,7 @@ mod tests {
         url: "https://ctf.example.com".into(),
         token: None,
       },
-      workspace: WorkspaceSection {
-        name: "test-ctf".into(),
-      },
+      workspace: WorkspaceSection { name: "test-ctf".into() },
       scaffold: ScaffoldConfig::default(),
     };
     let server = McpServer::new(platform, dir.path().to_path_buf(), config);
@@ -1043,10 +900,7 @@ mod tests {
   #[tokio::test]
   async fn submit_flag_empty_flag_returns_error() {
     let (server, _dir) = make_server();
-    let params = Parameters(SubmitFlagParams {
-      flag: "   ".into(),
-      challenge: "Easy RSA".into(),
-    });
+    let params = Parameters(SubmitFlagParams { flag: "   ".into(), challenge: "Easy RSA".into() });
     let result = server.ctf_submit_flag(params).await;
     assert!(result.is_err());
   }
@@ -1054,10 +908,7 @@ mod tests {
   #[tokio::test]
   async fn submit_flag_empty_challenge_returns_error() {
     let (server, _dir) = make_server();
-    let params = Parameters(SubmitFlagParams {
-      flag: "flag{test}".into(),
-      challenge: "   ".into(),
-    });
+    let params = Parameters(SubmitFlagParams { flag: "flag{test}".into(), challenge: "   ".into() });
     let result = server.ctf_submit_flag(params).await;
     assert!(result.is_err());
   }
@@ -1125,9 +976,7 @@ mod tests {
   #[tokio::test]
   async fn unlock_hint_empty_id_returns_error() {
     let (server, _dir) = make_server();
-    let params = Parameters(UnlockHintParams {
-      hint_id: "   ".into(),
-    });
+    let params = Parameters(UnlockHintParams { hint_id: "   ".into() });
     let result = server.ctf_unlock_hint(params).await;
     assert!(result.is_err());
   }

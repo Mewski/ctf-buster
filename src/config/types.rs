@@ -36,11 +36,7 @@ pub struct ScaffoldConfig {
 
 impl Default for ScaffoldConfig {
   fn default() -> Self {
-    Self {
-      template: default_template(),
-      create_solve_file: true,
-      create_notes_file: true,
-    }
+    Self { template: default_template(), create_solve_file: true, create_notes_file: true }
   }
 }
 

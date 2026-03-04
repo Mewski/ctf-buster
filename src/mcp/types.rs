@@ -79,13 +79,9 @@ pub struct AutoQueueParams {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct SolvePromptParams {
-  #[schemars(
-    description = "Number of challenges to generate prompts for (takes from top of queue). Defaults to 1."
-  )]
+  #[schemars(description = "Number of challenges to generate prompts for (takes from top of queue). Defaults to 1.")]
   pub count: Option<usize>,
-  #[schemars(
-    description = "Specific challenge name to generate a prompt for (ignores queue order)"
-  )]
+  #[schemars(description = "Specific challenge name to generate a prompt for (ignores queue order)")]
   pub challenge: Option<String>,
 }
 
@@ -93,12 +89,8 @@ pub struct SolvePromptParams {
 pub struct WriteupParams {
   #[schemars(description = "Challenge name (must already exist in state — submit the flag first)")]
   pub challenge: String,
-  #[schemars(
-    description = "How the challenge was solved — approach, key insights, steps taken"
-  )]
+  #[schemars(description = "How the challenge was solved — approach, key insights, steps taken")]
   pub methodology: String,
-  #[schemars(
-    description = "List of tools/techniques used (e.g., [\"rsa_toolkit\", \"transform_chain\", \"python\"])"
-  )]
+  #[schemars(description = "List of tools/techniques used (e.g., [\"rsa_toolkit\", \"transform_chain\", \"python\"])")]
   pub tools_used: Vec<String>,
 }

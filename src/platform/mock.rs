@@ -26,16 +26,9 @@ impl MockPlatform {
           value: 100,
           solves: 50,
           solved_by_me: false,
-          files: vec![ChallengeFile {
-            name: "output.txt".into(),
-            url: "/files/output.txt".into(),
-          }],
+          files: vec![ChallengeFile { name: "output.txt".into(), url: "/files/output.txt".into() }],
           tags: vec!["easy".into(), "rsa".into()],
-          hints: vec![Hint {
-            id: "1".into(),
-            content: Some("Use factordb".into()),
-            cost: 0,
-          }],
+          hints: vec![Hint { id: "1".into(), content: Some("Use factordb".into()), cost: 0 }],
         },
         Challenge {
           id: "2".into(),
@@ -58,40 +51,20 @@ impl MockPlatform {
           solves: 10,
           solved_by_me: false,
           files: vec![
-            ChallengeFile {
-              name: "vuln".into(),
-              url: "/files/vuln".into(),
-            },
-            ChallengeFile {
-              name: "vuln.c".into(),
-              url: "/files/vuln.c".into(),
-            },
+            ChallengeFile { name: "vuln".into(), url: "/files/vuln".into() },
+            ChallengeFile { name: "vuln.c".into(), url: "/files/vuln.c".into() },
           ],
           tags: vec!["hard".into()],
-          hints: vec![
-            Hint {
-              id: "2".into(),
-              content: None,
-              cost: 50,
-            },
-          ],
+          hints: vec![Hint { id: "2".into(), content: None, cost: 50 }],
         },
       ],
-      team_info: TeamInfo {
-        name: "TestTeam".into(),
-        score: 200,
-        rank: Some(5),
-        solves: vec![],
-      },
+      team_info: TeamInfo { name: "TestTeam".into(), score: 200, rank: Some(5), solves: vec![] },
       scoreboard: vec![
         ScoreboardEntry { rank: 1, name: "Alpha".into(), score: 1000 },
         ScoreboardEntry { rank: 2, name: "Beta".into(), score: 800 },
         ScoreboardEntry { rank: 3, name: "Gamma".into(), score: 600 },
       ],
-      submit_results: Mutex::new(vec![SubmitResult::Correct {
-        challenge: "test".into(),
-        points: 100,
-      }]),
+      submit_results: Mutex::new(vec![SubmitResult::Correct { challenge: "test".into(), points: 100 }]),
     }
   }
 }
@@ -107,12 +80,7 @@ impl Platform for MockPlatform {
   }
 
   async fn challenge(&self, id: &str) -> Result<Challenge> {
-    self
-      .challenges
-      .iter()
-      .find(|c| c.id == id)
-      .cloned()
-      .ok_or(Error::ChallengeNotFound(id.into()))
+    self.challenges.iter().find(|c| c.id == id).cloned().ok_or(Error::ChallengeNotFound(id.into()))
   }
 
   async fn submit(&self, _challenge_id: &str, _flag: &str) -> Result<SubmitResult> {
@@ -135,11 +103,7 @@ impl Platform for MockPlatform {
   }
 
   async fn unlock_hint(&self, hint_id: &str) -> Result<Hint> {
-    Ok(Hint {
-      id: hint_id.into(),
-      content: Some("Unlocked hint content".into()),
-      cost: 50,
-    })
+    Ok(Hint { id: hint_id.into(), content: Some("Unlocked hint content".into()), cost: 50 })
   }
 
   async fn notifications(&self) -> Result<Vec<Notification>> {

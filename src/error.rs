@@ -50,38 +50,14 @@ mod tests {
 
   #[test]
   fn error_display_messages() {
-    assert_eq!(
-      Error::Platform("connection refused".into()).to_string(),
-      "Platform error: connection refused"
-    );
-    assert_eq!(
-      Error::Auth("invalid token".into()).to_string(),
-      "Auth error: invalid token"
-    );
-    assert_eq!(
-      Error::NotInWorkspace.to_string(),
-      "Not in a CTF workspace. Run `ctf init` first."
-    );
-    assert_eq!(
-      Error::ChallengeNotFound("crypto101".into()).to_string(),
-      "Challenge not found: crypto101"
-    );
-    assert_eq!(
-      Error::Config("bad url".into()).to_string(),
-      "Config error: bad url"
-    );
-    assert_eq!(
-      Error::Workspace("missing dir".into()).to_string(),
-      "Workspace error: missing dir"
-    );
-    assert_eq!(
-      Error::Keyring("access denied".into()).to_string(),
-      "Keyring error: access denied"
-    );
-    assert_eq!(
-      Error::Mcp("transport failed".into()).to_string(),
-      "MCP error: transport failed"
-    );
+    assert_eq!(Error::Platform("connection refused".into()).to_string(), "Platform error: connection refused");
+    assert_eq!(Error::Auth("invalid token".into()).to_string(), "Auth error: invalid token");
+    assert_eq!(Error::NotInWorkspace.to_string(), "Not in a CTF workspace. Run `ctf init` first.");
+    assert_eq!(Error::ChallengeNotFound("crypto101".into()).to_string(), "Challenge not found: crypto101");
+    assert_eq!(Error::Config("bad url".into()).to_string(), "Config error: bad url");
+    assert_eq!(Error::Workspace("missing dir".into()).to_string(), "Workspace error: missing dir");
+    assert_eq!(Error::Keyring("access denied".into()).to_string(), "Keyring error: access denied");
+    assert_eq!(Error::Mcp("transport failed".into()).to_string(), "MCP error: transport failed");
   }
 
   #[test]

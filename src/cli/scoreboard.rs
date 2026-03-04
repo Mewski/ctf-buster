@@ -3,11 +3,7 @@ use crate::error::Result;
 use crate::output;
 use crate::platform::Platform;
 
-pub async fn handle_scoreboard(
-  platform: &dyn Platform,
-  limit: u32,
-  format: &OutputFormat,
-) -> Result<()> {
+pub async fn handle_scoreboard(platform: &dyn Platform, limit: u32, format: &OutputFormat) -> Result<()> {
   let entries = platform.scoreboard(Some(limit)).await?;
 
   match format {
