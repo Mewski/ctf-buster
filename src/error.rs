@@ -39,4 +39,7 @@ pub enum Error {
 
   #[error("Keyring error: {0}")]
   Keyring(String),
+
+  #[error("MCP error: {0}")]
+  Mcp(String),
 }

@@ -11,3 +11,4 @@ result
 test-workspace/
 
 .claude
+.venv

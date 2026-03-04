@@ -103,3 +103,107 @@ fn generate_notes_template(challenge: &Challenge) -> String {
     description = challenge.description,
   )
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use tempfile::TempDir;
+
+  fn make_challenge(name: &str, category: &str) -> Challenge {
+    Challenge {
+      id: "1".into(),
+      name: name.into(),
+      category: category.into(),
+      description: "A test challenge".into(),
+      value: 100,
+      solves: 5,
+      solved_by_me: false,
+      files: vec![],
+      tags: vec![],
+      hints: vec![],
+    }
+  }
+
+  #[test]
+  fn sanitize_spaces_to_hyphens() {
+    assert_eq!(sanitize_name("my challenge"), "my-challenge");
+  }
+
+  #[test]
+  fn sanitize_special_chars() {
+    assert_eq!(sanitize_name("RSA!@#"), "rsa___");
+  }
+
+  #[test]
+  fn sanitize_preserves_hyphens_and_underscores() {
+    assert_eq!(sanitize_name("my-test_challenge"), "my-test_challenge");
+  }
+
+  #[test]
+  fn sanitize_uppercase_to_lowercase() {
+    assert_eq!(sanitize_name("CryptoHack"), "cryptohack");
+  }
+
+  #[test]
+  fn challenge_dir_default_template() {
+    let c = make_challenge("Easy RSA", "Crypto");
+    let config = ScaffoldConfig::default();
+    let dir = challenge_dir(Path::new("/ws"), &c, &config);
+    assert_eq!(dir, Path::new("/ws/crypto/easy-rsa"));
+  }
+
+  #[test]
+  fn challenge_dir_custom_template() {
+    let c = make_challenge("Easy RSA", "Crypto");
+    let config = ScaffoldConfig {
+      template: "{name}".into(),
+      create_solve_file: false,
+      create_notes_file: false,
+    };
+    let dir = challenge_dir(Path::new("/ws"), &c, &config);
+    assert_eq!(dir, Path::new("/ws/easy-rsa"));
+  }
+
+  #[test]
+  fn scaffold_creates_directory_and_files() {
+    let dir = TempDir::new().unwrap();
+    let c = make_challenge("Test", "Web");
+    let config = ScaffoldConfig::default();
+
+    let created = scaffold_challenge(dir.path(), &c, &config).unwrap();
+    assert!(created);
+
+    let challenge_path = dir.path().join("web/test");
+    assert!(challenge_path.exists());
+    assert!(challenge_path.join("solve.py").exists());
+    assert!(challenge_path.join("notes.md").exists());
+  }
+
+  #[test]
+  fn scaffold_idempotent() {
+    let dir = TempDir::new().unwrap();
+    let c = make_challenge("Test", "Web");
+    let config = ScaffoldConfig::default();
+
+    assert!(scaffold_challenge(dir.path(), &c, &config).unwrap());
+    assert!(!scaffold_challenge(dir.path(), &c, &config).unwrap());
+  }
+
+  #[test]
+  fn solve_template_contains_name() {
+    let c = make_challenge("My Challenge", "Crypto");
+    let content = generate_solve_template(&c);
+    assert!(content.contains("My Challenge"));
+    assert!(content.contains("Crypto"));
+    assert!(content.contains("100 pts"));
+  }
+
+  #[test]
+  fn notes_template_contains_description() {
+    let c = make_challenge("My Challenge", "Crypto");
+    let content = generate_notes_template(&c);
+    assert!(content.contains("# My Challenge"));
+    assert!(content.contains("A test challenge"));
+    assert!(content.contains("**Points:** 100"));
+  }
+}

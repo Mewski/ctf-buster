@@ -1,6 +1,7 @@
 mod cli;
 mod config;
 mod error;
+mod mcp;
 mod output;
 mod platform;
 mod workspace;
@@ -65,10 +66,10 @@ async fn run(cli: Cli) -> error::Result<()> {
       cli::workspace::handle_init(&name, url.as_deref(), platform_type.as_deref()).await?;
     }
 
-    Command::Sync => {
+    Command::Sync { full } => {
       let cwd = std::env::current_dir()?;
       let root = config::find_workspace_root(&cwd).ok_or(error::Error::NotInWorkspace)?;
-      cli::workspace::handle_sync(&root).await?;
+      cli::workspace::handle_sync(&root, full).await?;
     }
 
     Command::Challenges {
@@ -129,6 +130,35 @@ async fn run(cli: Cli) -> error::Result<()> {
       let cwd = std::env::current_dir()?;
       let root = config::find_workspace_root(&cwd).ok_or(error::Error::NotInWorkspace)?;
       cli::workspace::handle_files(&root, &id_or_name).await?;
+    }
+
+    Command::Mcp { workspace } => {
+      use rmcp::ServiceExt;
+      use std::sync::Arc;
+
+      // Resolve workspace: --workspace arg > CTF_WORKSPACE env > cwd auto-detect
+      let root = if let Some(ws) = workspace {
+        ws
+      } else {
+        let cwd = std::env::current_dir()?;
+        config::find_workspace_root(&cwd).ok_or(error::Error::NotInWorkspace)?
+      };
+
+      let ws_config = config::load_workspace_config(&root)?;
+      let token = cli::auth::get_token(&ws_config.workspace.name)?;
+      let plat = platform::create_platform(&ws_config.platform, &token).await?;
+      let plat: Arc<dyn platform::Platform> = Arc::from(plat);
+
+      let server = mcp::McpServer::new(plat, root, ws_config);
+      let service = server
+        .serve(rmcp::transport::stdio())
+        .await
+        .map_err(|e| error::Error::Mcp(e.to_string()))?;
+
+      service
+        .waiting()
+        .await
+        .map_err(|e| error::Error::Mcp(e.to_string()))?;
     }
   }
 

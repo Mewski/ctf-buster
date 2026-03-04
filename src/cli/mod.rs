@@ -4,6 +4,8 @@ pub mod scoreboard;
 pub mod submit;
 pub mod workspace;
 
+use std::path::PathBuf;
+
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -45,7 +47,11 @@ pub enum Command {
   },
 
   /// Sync challenges from the platform
-  Sync,
+  Sync {
+    /// Fetch full details (descriptions, hints, files) for all challenges
+    #[arg(long)]
+    full: bool,
+  },
 
   /// List all challenges
   #[command(alias = "ls", alias = "chals")]
@@ -95,5 +101,12 @@ pub enum Command {
   Files {
     /// Challenge ID or name
     id_or_name: String,
+  },
+
+  /// Run as an MCP server (stdio transport)
+  Mcp {
+    /// Workspace directory (defaults to CTF_WORKSPACE env or auto-detected)
+    #[arg(long, env = "CTF_WORKSPACE")]
+    workspace: Option<PathBuf>,
   },
 }

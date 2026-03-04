@@ -391,3 +391,112 @@ impl Platform for CtfdPlatform {
     })
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn parse_ctfd_challenge_list_item() {
+    let json = r#"{"id":1,"name":"Test","category":"web","value":100,"solves":5,"solved_by_me":false,"tags":[]}"#;
+    let c: CtfdChallenge = serde_json::from_str(json).unwrap();
+    assert_eq!(c.id, 1);
+    assert_eq!(c.name, "Test");
+    assert!(c.description.is_empty());
+    assert!(c.files.is_empty());
+    assert!(c.hints.is_empty());
+  }
+
+  #[test]
+  fn parse_ctfd_challenge_with_details() {
+    let json = r#"{
+      "id": 42,
+      "name": "Crypto 101",
+      "category": "crypto",
+      "description": "<p>Solve this RSA problem</p>",
+      "value": 500,
+      "solves": 10,
+      "solved_by_me": true,
+      "files": ["/files/abc123/output.txt?token=xyz"],
+      "tags": [{"value": "easy"}],
+      "hints": [{"id": 5, "content": "Think about factoring", "cost": 50}]
+    }"#;
+    let c: CtfdChallenge = serde_json::from_str(json).unwrap();
+    assert_eq!(c.description, "<p>Solve this RSA problem</p>");
+    assert_eq!(c.files.len(), 1);
+    assert_eq!(c.hints.len(), 1);
+    assert_eq!(c.hints[0].cost, 50);
+    assert_eq!(c.solved_by_me, Some(true));
+  }
+
+  #[test]
+  fn ctfd_challenge_to_domain_conversion() {
+    let ctfd = CtfdChallenge {
+      id: 1,
+      name: "Test".into(),
+      category: "web".into(),
+      description: "desc".into(),
+      value: 100,
+      solves: 5,
+      solved_by_me: Some(true),
+      files: vec!["/files/abc/data.bin?token=x".into()],
+      tags: vec![serde_json::json!({"value": "easy"})],
+      hints: vec![CtfdHint { id: 10, content: Some("hint".into()), cost: 0 }],
+    };
+    let challenge: Challenge = ctfd.into();
+    assert_eq!(challenge.id, "1");
+    assert!(challenge.solved_by_me);
+    assert_eq!(challenge.files[0].name, "data.bin");
+    assert_eq!(challenge.tags, vec!["easy"]);
+    assert_eq!(challenge.hints[0].content.as_deref(), Some("hint"));
+  }
+
+  #[test]
+  fn ctfd_file_name_extraction() {
+    let ctfd = CtfdChallenge {
+      id: 1,
+      name: "t".into(),
+      category: "c".into(),
+      description: String::new(),
+      value: 0,
+      solves: 0,
+      solved_by_me: None,
+      files: vec![
+        "/files/abc123/challenge.py?token=xyz".into(),
+        "/files/def456/flag.enc".into(),
+      ],
+      tags: vec![],
+      hints: vec![],
+    };
+    let challenge: Challenge = ctfd.into();
+    assert_eq!(challenge.files[0].name, "challenge.py");
+    assert_eq!(challenge.files[1].name, "flag.enc");
+  }
+
+  #[test]
+  fn auth_method_session_cookie() {
+    let plat = CtfdPlatform::new(
+      "https://ctf.example.com".into(),
+      "abc123.XYZdef456".into(),
+    );
+    assert!(matches!(plat.auth, AuthMethod::Session));
+  }
+
+  #[test]
+  fn auth_method_api_token() {
+    let plat = CtfdPlatform::new(
+      "https://ctf.example.com".into(),
+      "abcdef1234567890".into(),
+    );
+    assert!(matches!(plat.auth, AuthMethod::Token(_)));
+  }
+
+  #[test]
+  fn auth_method_ctfd_prefix_token() {
+    let plat = CtfdPlatform::new(
+      "https://ctf.example.com".into(),
+      "ctfd_abcdef.1234567890".into(),
+    );
+    assert!(matches!(plat.auth, AuthMethod::Token(_)));
+  }
+}

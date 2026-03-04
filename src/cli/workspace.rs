@@ -60,7 +60,7 @@ pub async fn handle_init(
   Ok(())
 }
 
-pub async fn handle_sync(workspace_root: &Path) -> Result<()> {
+pub async fn handle_sync(workspace_root: &Path, full: bool) -> Result<()> {
   let ws_config = config::load_workspace_config(workspace_root)?;
   let token = auth::get_token(&ws_config.workspace.name)?;
   let plat = platform::create_platform(&ws_config.platform, &token).await?;
@@ -95,14 +95,45 @@ pub async fn handle_sync(workspace_root: &Path) -> Result<()> {
   }
 
   // Update state
-  state::update_sync(workspace_root, &challenges)?;
+  if full {
+    use futures::stream::{self, StreamExt};
+
+    println!("Fetching full challenge details...");
+    let pb = indicatif::ProgressBar::new(challenges.len() as u64);
+    pb.set_style(
+      indicatif::ProgressStyle::default_bar()
+        .template("{bar:40.cyan/blue} {pos}/{len} {msg}")
+        .unwrap(),
+    );
+
+    let detailed: Vec<_> = stream::iter(challenges.iter().map(|c| {
+      let platform = plat.as_ref();
+      let id = c.id.clone();
+      let pb = pb.clone();
+      async move {
+        let result = platform.challenge(&id).await;
+        pb.inc(1);
+        result
+      }
+    }))
+    .buffer_unordered(5)
+    .filter_map(|r| async { r.ok() })
+    .collect()
+    .await;
+
+    pb.finish_with_message("done");
+    state::update_sync_full(workspace_root, &detailed)?;
+  } else {
+    state::update_sync(workspace_root, &challenges)?;
+  }
 
   println!(
-    "{} Synced {} challenges ({} new, {} files downloaded)",
+    "{} Synced {} challenges ({} new, {} files downloaded){}",
     "✓".green().bold(),
     challenges.len(),
     new_count,
-    file_count
+    file_count,
+    if full { " with full details cached" } else { "" }
   );
 
   Ok(())

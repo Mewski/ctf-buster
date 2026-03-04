@@ -138,3 +138,81 @@ pub async fn resolve_challenge(
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::platform::mock::MockPlatform;
+
+  #[tokio::test]
+  async fn resolve_by_numeric_id() {
+    let mock = MockPlatform::new();
+    let challenges = mock.challenges.clone();
+    let result = resolve_challenge(&mock, "1", &challenges).await.unwrap();
+    assert_eq!(result.name, "Easy RSA");
+  }
+
+  #[tokio::test]
+  async fn resolve_by_exact_name() {
+    let mock = MockPlatform::new();
+    let challenges = mock.challenges.clone();
+    let result = resolve_challenge(&mock, "SQL Injection", &challenges)
+      .await
+      .unwrap();
+    assert_eq!(result.id, "2");
+  }
+
+  #[tokio::test]
+  async fn resolve_by_exact_name_case_insensitive() {
+    let mock = MockPlatform::new();
+    let challenges = mock.challenges.clone();
+    let result = resolve_challenge(&mock, "easy rsa", &challenges)
+      .await
+      .unwrap();
+    assert_eq!(result.id, "1");
+  }
+
+  #[tokio::test]
+  async fn resolve_by_substring() {
+    let mock = MockPlatform::new();
+    let challenges = mock.challenges.clone();
+    let result = resolve_challenge(&mock, "Buffer", &challenges)
+      .await
+      .unwrap();
+    assert_eq!(result.id, "3");
+  }
+
+  #[tokio::test]
+  async fn resolve_not_found() {
+    let mock = MockPlatform::new();
+    let challenges = mock.challenges.clone();
+    let result = resolve_challenge(&mock, "nonexistent", &challenges).await;
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("not found") || err.contains("Challenge"));
+  }
+
+  #[tokio::test]
+  async fn resolve_ambiguous_returns_error() {
+    let mock = MockPlatform::new();
+    // Both "Easy RSA" and "SQL Injection" contain lowercase 'a'
+    // Use a term that matches multiple challenges
+    let mut challenges = mock.challenges.clone();
+    challenges.push(Challenge {
+      id: "4".into(),
+      name: "Easy AES".into(),
+      category: "crypto".into(),
+      description: "".into(),
+      value: 100,
+      solves: 5,
+      solved_by_me: false,
+      files: vec![],
+      tags: vec![],
+      hints: vec![],
+    });
+    let result = resolve_challenge(&mock, "Easy", &challenges).await;
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("Ambiguous"));
+  }
+}

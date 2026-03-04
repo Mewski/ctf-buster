@@ -1,4 +1,6 @@
 pub mod ctfd;
+#[cfg(test)]
+pub mod mock;
 pub mod rctf;
 pub mod types;
 

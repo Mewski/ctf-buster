@@ -330,3 +330,190 @@ impl Platform for RctfPlatform {
     ))
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn parse_rctf_challenge() {
+    let json = serde_json::json!({
+      "id": "abc123",
+      "name": "Flag Store",
+      "category": "web",
+      "description": "Find the hidden flag in the store",
+      "points": 250,
+      "solves": 15,
+      "files": [
+        { "name": "app.py", "url": "/dl/app.py" }
+      ]
+    });
+
+    let c: RctfChallenge = serde_json::from_value(json).unwrap();
+    assert_eq!(c.id, "abc123");
+    assert_eq!(c.name, "Flag Store");
+    assert_eq!(c.category, "web");
+    assert_eq!(c.description, "Find the hidden flag in the store");
+    assert_eq!(c.points, 250);
+    assert_eq!(c.solves, 15);
+    assert_eq!(c.files.len(), 1);
+    assert_eq!(c.files[0].name, "app.py");
+  }
+
+  #[test]
+  fn parse_rctf_challenge_no_files() {
+    let json = serde_json::json!({
+      "id": "def456",
+      "name": "Simple Math",
+      "category": "misc",
+      "description": "What is 2+2?",
+      "points": 50,
+      "solves": 100
+    });
+
+    let c: RctfChallenge = serde_json::from_value(json).unwrap();
+    assert!(c.files.is_empty());
+  }
+
+  #[test]
+  fn rctf_challenge_to_challenge_conversion() {
+    let rctf = RctfChallenge {
+      id: "abc".into(),
+      name: "Test".into(),
+      category: "pwn".into(),
+      description: "Pwn it".into(),
+      points: 400,
+      solves: 3,
+      files: vec![RctfFile {
+        name: "binary".into(),
+        url: "/dl/binary".into(),
+      }],
+    };
+
+    let challenge = Challenge {
+      id: rctf.id.clone(),
+      name: rctf.name.clone(),
+      category: rctf.category.clone(),
+      description: rctf.description.clone(),
+      value: rctf.points,
+      solves: rctf.solves,
+      solved_by_me: false,
+      files: rctf
+        .files
+        .iter()
+        .map(|f| ChallengeFile {
+          name: f.name.clone(),
+          url: f.url.clone(),
+        })
+        .collect(),
+      tags: Vec::new(),
+      hints: Vec::new(),
+    };
+
+    assert_eq!(challenge.id, "abc");
+    assert_eq!(challenge.value, 400);
+    assert!(!challenge.solved_by_me);
+    assert_eq!(challenge.files.len(), 1);
+    assert!(challenge.tags.is_empty());
+    assert!(challenge.hints.is_empty());
+  }
+
+  #[test]
+  fn parse_submit_good_flag() {
+    let body = serde_json::json!({
+      "kind": "goodFlag",
+      "message": "correct"
+    });
+    let kind = body.get("kind").and_then(|k| k.as_str()).unwrap();
+    assert_eq!(kind, "goodFlag");
+  }
+
+  #[test]
+  fn parse_submit_bad_flag() {
+    let body = serde_json::json!({
+      "kind": "badFlag",
+      "message": "incorrect"
+    });
+    let kind = body.get("kind").and_then(|k| k.as_str()).unwrap();
+    assert_eq!(kind, "badFlag");
+  }
+
+  #[test]
+  fn parse_submit_rate_limited() {
+    let body = serde_json::json!({
+      "kind": "badRateLimit",
+      "data": { "timeLeft": 30000 }
+    });
+    let kind = body.get("kind").and_then(|k| k.as_str()).unwrap();
+    assert_eq!(kind, "badRateLimit");
+
+    let time_left = body
+      .get("data")
+      .and_then(|d| d.get("timeLeft"))
+      .and_then(|t| t.as_u64());
+    assert_eq!(time_left, Some(30000));
+  }
+
+  #[test]
+  fn parse_submit_already_solved() {
+    let body = serde_json::json!({
+      "kind": "badAlreadySolvedFlag",
+      "message": "already solved"
+    });
+    let kind = body.get("kind").and_then(|k| k.as_str()).unwrap();
+    assert_eq!(kind, "badAlreadySolvedFlag");
+  }
+
+  #[test]
+  fn parse_leaderboard() {
+    let body = serde_json::json!({
+      "kind": "goodLeaderboard",
+      "data": {
+        "leaderboard": [
+          { "name": "Team1", "score": 1000 },
+          { "name": "Team2", "score": 800 },
+          { "name": "Team3", "score": 500 }
+        ]
+      }
+    });
+
+    let leaderboard = body
+      .get("data")
+      .unwrap()
+      .get("leaderboard")
+      .unwrap()
+      .as_array()
+      .unwrap();
+
+    assert_eq!(leaderboard.len(), 3);
+    assert_eq!(leaderboard[0].get("name").unwrap().as_str().unwrap(), "Team1");
+    assert_eq!(leaderboard[0].get("score").unwrap().as_u64().unwrap(), 1000);
+  }
+
+  #[test]
+  fn parse_whoami() {
+    let body = serde_json::json!({
+      "kind": "goodUserData",
+      "data": {
+        "name": "MyTeam",
+        "score": 1500
+      }
+    });
+
+    let data = body.get("data").unwrap();
+    let name = data.get("name").unwrap().as_str().unwrap();
+    let score = data.get("score").unwrap().as_u64().unwrap();
+
+    assert_eq!(name, "MyTeam");
+    assert_eq!(score, 1500);
+  }
+
+  #[test]
+  fn api_url_construction() {
+    let plat = RctfPlatform::new("https://ctf.example.com/".into(), "token".into());
+    assert_eq!(plat.api_url("/challs"), "https://ctf.example.com/api/v1/challs");
+
+    let plat2 = RctfPlatform::new("https://ctf.example.com".into(), "token".into());
+    assert_eq!(plat2.api_url("/challs"), "https://ctf.example.com/api/v1/challs");
+  }
+}

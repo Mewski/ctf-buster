@@ -26,3 +26,9 @@ toml = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = { version = "2", features = ["serde"] }
+rmcp = { version = "1.1", features = ["server", "transport-io", "macros"] }
+schemars = "1.0"
+futures = "0.3"
+
+[dev-dependencies]
+tempfile = "3"

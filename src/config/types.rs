@@ -71,3 +71,64 @@ impl Default for GlobalDefaults {
 fn default_output() -> String {
   "table".to_string()
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn parse_minimal_workspace_config() {
+    let toml = r#"
+      [platform]
+      url = "https://ctf.example.com"
+
+      [workspace]
+      name = "test-ctf"
+    "#;
+    let config: WorkspaceConfig = toml::from_str(toml).unwrap();
+    assert_eq!(config.platform.url, "https://ctf.example.com");
+    assert!(config.platform.platform_type.is_none());
+    assert_eq!(config.workspace.name, "test-ctf");
+    // scaffold should use defaults
+    assert_eq!(config.scaffold.template, "{category}/{name}");
+    assert!(config.scaffold.create_solve_file);
+    assert!(config.scaffold.create_notes_file);
+  }
+
+  #[test]
+  fn parse_full_workspace_config() {
+    let toml = r#"
+      [platform]
+      type = "ctfd"
+      url = "https://ctf.example.com"
+
+      [workspace]
+      name = "heroctf"
+
+      [scaffold]
+      template = "{name}"
+      create_solve_file = false
+      create_notes_file = true
+    "#;
+    let config: WorkspaceConfig = toml::from_str(toml).unwrap();
+    assert_eq!(config.platform.platform_type.as_deref(), Some("ctfd"));
+    assert_eq!(config.scaffold.template, "{name}");
+    assert!(!config.scaffold.create_solve_file);
+  }
+
+  #[test]
+  fn scaffold_config_defaults() {
+    let config = ScaffoldConfig::default();
+    assert_eq!(config.template, "{category}/{name}");
+    assert!(config.create_solve_file);
+    assert!(config.create_notes_file);
+  }
+
+  #[test]
+  fn platform_config_without_type() {
+    let toml = r#"url = "https://ctf.example.com""#;
+    let config: PlatformConfig = toml::from_str(toml).unwrap();
+    assert!(config.platform_type.is_none());
+    assert_eq!(config.url, "https://ctf.example.com");
+  }
+}
