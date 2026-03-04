@@ -2,11 +2,9 @@
 """CTF Crypto & Encoding MCP Server — transform chains, RSA attacks, constraint solving."""
 
 import base64
-import binascii
 import codecs
 import hashlib
 import json
-import math
 import re
 import string
 import urllib.parse
@@ -25,26 +23,6 @@ mcp = FastMCP(
 
 
 # ── transform_chain ──────────────────────────────────────────────────────────
-
-OPERATIONS = {
-    "base64_encode",
-    "base64_decode",
-    "hex_encode",
-    "hex_decode",
-    "url_encode",
-    "url_decode",
-    "rot13",
-    "reverse",
-    "upper",
-    "lower",
-    "binary_encode",
-    "binary_decode",
-    "ascii_to_decimal",
-    "decimal_to_ascii",
-    "atbash",
-    "strip",
-}
-# Parameterized ops: rot(N), xor(key), vigenere_encode(key), vigenere_decode(key)
 
 
 def _apply_op(data: str, op: str) -> str:
@@ -413,9 +391,6 @@ def rsa_toolkit(
 
         elif atk == "wiener":
             # Wiener's attack — works when d is small
-            from sympy import Rational
-
-            convergents = []
             cf = []
             num, den = e, n_int
             while den:

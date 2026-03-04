@@ -9,7 +9,7 @@ import textwrap
 
 sys.path.insert(0, os.path.dirname(__file__))
 from fastmcp import FastMCP
-from lib.subprocess_utils import parse_checksec, run_tool, safe_read_file
+from lib.subprocess_utils import parse_checksec, run_tool
 
 mcp = FastMCP(
     "ctf-binary",
@@ -566,7 +566,7 @@ def angr_analyze(
 
         if mode == "find_addr" and target_addr:
             target = int(target_addr, 16)
-            simgr.explore(find=target, avoid=avoid_list, timeout=120)
+            simgr.explore(find=target, avoid=avoid_list)
 
             if simgr.found:
                 found_state = simgr.found[0]
@@ -593,7 +593,7 @@ def angr_analyze(
                 out = s.posix.dumps(1)
                 return find_string.encode() in out
 
-            simgr.explore(find=check_stdout, avoid=avoid_list, timeout=120)
+            simgr.explore(find=check_stdout, avoid=avoid_list)
 
             if simgr.found:
                 found_state = simgr.found[0]
@@ -631,7 +631,6 @@ def angr_analyze(
             simgr.explore(
                 find=check_flag,
                 avoid=check_fail if not avoid_list else avoid_list,
-                timeout=120,
             )
 
             if simgr.found:

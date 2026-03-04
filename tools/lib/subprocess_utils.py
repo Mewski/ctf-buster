@@ -71,10 +71,3 @@ def safe_read_file(path, max_size=10_000_000):
         raise ValueError(f"File too large: {size} bytes (max {max_size})")
     with open(path, "rb") as f:
         return f.read()
-
-
-def which(tool):
-    """Check if a tool is available on PATH."""
-    import shutil
-
-    return shutil.which(tool)

@@ -1,4 +1,4 @@
-"""Tests for lib/subprocess_utils.py — run_tool, parse_checksec, safe_read_file, which."""
+"""Tests for lib/subprocess_utils.py — run_tool, parse_checksec, safe_read_file."""
 
 import os
 import sys
@@ -9,7 +9,7 @@ import pytest
 # Allow imports from the tools directory
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from lib.subprocess_utils import parse_checksec, run_tool, safe_read_file, which
+from lib.subprocess_utils import parse_checksec, run_tool, safe_read_file
 
 # ── run_tool tests ───────────────────────────────────────────────────────────
 
@@ -206,32 +206,3 @@ class TestSafeReadFile:
             assert isinstance(data, bytes)
         finally:
             os.unlink(path)
-
-
-# ── which tests ──────────────────────────────────────────────────────────────
-
-
-class TestWhich:
-    def test_find_echo(self):
-        # "echo" should be available on any POSIX system
-        result = which("echo")
-        assert result is not None
-        assert "echo" in result
-
-    def test_find_python3(self):
-        result = which("python3")
-        assert result is not None
-
-    def test_nonexistent_tool_returns_none(self):
-        result = which("nonexistent_tool_xyz_789")
-        assert result is None
-
-    def test_returns_absolute_path(self):
-        result = which("sh")
-        assert result is not None
-        assert os.path.isabs(result)
-
-    def test_find_sh(self):
-        result = which("sh")
-        assert result is not None
-        assert os.path.isfile(result)
