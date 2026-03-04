@@ -1,5 +1,4 @@
 /target
-Cargo.lock
 PLAN.md
 .direnv/
 result
@@ -12,3 +11,4 @@ test-workspace/
 
 .claude
 .venv
+__pycache__/
