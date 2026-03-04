@@ -1012,3 +1012,123 @@ async fn resolve_challenge(
 ) -> crate::error::Result<crate::platform::types::Challenge> {
   crate::cli::challenge::resolve_challenge(platform, id_or_name, cached_challenges).await
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::config::types::{PlatformConfig, ScaffoldConfig, WorkspaceConfig, WorkspaceSection};
+  use crate::platform::mock::MockPlatform;
+  use tempfile::TempDir;
+
+  fn make_server() -> (McpServer, TempDir) {
+    let dir = TempDir::new().unwrap();
+    let platform = Arc::new(MockPlatform::new());
+    let config = WorkspaceConfig {
+      platform: PlatformConfig {
+        platform_type: Some("ctfd".into()),
+        url: "https://ctf.example.com".into(),
+        token: None,
+      },
+      workspace: WorkspaceSection {
+        name: "test-ctf".into(),
+      },
+      scaffold: ScaffoldConfig::default(),
+    };
+    let server = McpServer::new(platform, dir.path().to_path_buf(), config);
+    (server, dir)
+  }
+
+  // ── ctf_submit_flag validation tests ─────────────────────────────────────
+
+  #[tokio::test]
+  async fn submit_flag_empty_flag_returns_error() {
+    let (server, _dir) = make_server();
+    let params = Parameters(SubmitFlagParams {
+      flag: "   ".into(),
+      challenge: "Easy RSA".into(),
+    });
+    let result = server.ctf_submit_flag(params).await;
+    assert!(result.is_err());
+  }
+
+  #[tokio::test]
+  async fn submit_flag_empty_challenge_returns_error() {
+    let (server, _dir) = make_server();
+    let params = Parameters(SubmitFlagParams {
+      flag: "flag{test}".into(),
+      challenge: "   ".into(),
+    });
+    let result = server.ctf_submit_flag(params).await;
+    assert!(result.is_err());
+  }
+
+  // ── ctf_queue_update validation tests ────────────────────────────────────
+
+  #[tokio::test]
+  async fn queue_update_start_without_challenge_returns_error() {
+    let (server, _dir) = make_server();
+    let params = Parameters(QueueUpdateParams {
+      action: "start".into(),
+      challenge: None,
+      category: None,
+      notes: None,
+      queue_json: None,
+    });
+    let result = server.ctf_queue_update(params).await;
+    assert!(result.is_err());
+  }
+
+  #[tokio::test]
+  async fn queue_update_complete_without_challenge_returns_error() {
+    let (server, _dir) = make_server();
+    let params = Parameters(QueueUpdateParams {
+      action: "complete".into(),
+      challenge: None,
+      category: None,
+      notes: None,
+      queue_json: None,
+    });
+    let result = server.ctf_queue_update(params).await;
+    assert!(result.is_err());
+  }
+
+  #[tokio::test]
+  async fn queue_update_unknown_action_returns_error() {
+    let (server, _dir) = make_server();
+    let params = Parameters(QueueUpdateParams {
+      action: "invalid_action".into(),
+      challenge: None,
+      category: None,
+      notes: None,
+      queue_json: None,
+    });
+    let result = server.ctf_queue_update(params).await;
+    assert!(result.is_err());
+  }
+
+  // ── ctf_save_writeup validation tests ────────────────────────────────────
+
+  #[tokio::test]
+  async fn save_writeup_empty_name_returns_error() {
+    let (server, _dir) = make_server();
+    let params = Parameters(WriteupParams {
+      challenge: "   ".into(),
+      methodology: "some method".into(),
+      tools_used: vec!["tool1".into()],
+    });
+    let result = server.ctf_save_writeup(params).await;
+    assert!(result.is_err());
+  }
+
+  // ── ctf_unlock_hint validation tests ─────────────────────────────────────
+
+  #[tokio::test]
+  async fn unlock_hint_empty_id_returns_error() {
+    let (server, _dir) = make_server();
+    let params = Parameters(UnlockHintParams {
+      hint_id: "   ".into(),
+    });
+    let result = server.ctf_unlock_hint(params).await;
+    assert!(result.is_err());
+  }
+}

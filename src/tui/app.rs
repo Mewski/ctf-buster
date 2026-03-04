@@ -172,3 +172,237 @@ pub async fn run_dashboard(workspace_root: PathBuf, workspace_name: String) -> R
   ratatui::restore();
   Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::collections::HashMap;
+
+  use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+  fn make_challenge(
+    name: &str,
+    category: &str,
+    status: ChallengeStatus,
+    points: Option<u32>,
+  ) -> ChallengeState {
+    ChallengeState {
+      id: name.to_lowercase().replace(' ', "-"),
+      name: name.into(),
+      category: category.into(),
+      status,
+      solved_at: None,
+      points,
+      flag: None,
+      description: None,
+      hints: None,
+      files: None,
+      tags: None,
+      details_fetched_at: None,
+      methodology: None,
+      tools_used: None,
+    }
+  }
+
+  fn make_app(challenges: Vec<ChallengeState>) -> App {
+    let mut map = HashMap::new();
+    for c in challenges {
+      map.insert(c.name.to_lowercase(), c);
+    }
+    App {
+      workspace_root: PathBuf::from("/tmp"),
+      workspace_name: "test".into(),
+      state: WorkspaceState {
+        last_sync: None,
+        challenges: map,
+        notifications: vec![],
+        orchestration: Default::default(),
+      },
+      active_panel: ActivePanel::Challenges,
+      should_quit: false,
+      challenge_scroll: 0,
+      notif_scroll: 0,
+    }
+  }
+
+  // ── ActivePanel::next cycle tests ────────────────────────────────────────
+
+  #[test]
+  fn active_panel_cycles_challenges_to_queue() {
+    assert_eq!(ActivePanel::Challenges.next(), ActivePanel::Queue);
+  }
+
+  #[test]
+  fn active_panel_cycles_queue_to_notifications() {
+    assert_eq!(ActivePanel::Queue.next(), ActivePanel::Notifications);
+  }
+
+  #[test]
+  fn active_panel_cycles_notifications_to_challenges() {
+    assert_eq!(ActivePanel::Notifications.next(), ActivePanel::Challenges);
+  }
+
+  // ── solved_count tests ───────────────────────────────────────────────────
+
+  #[test]
+  fn solved_count_with_mixed_statuses() {
+    let app = make_app(vec![
+      make_challenge("A", "crypto", ChallengeStatus::Solved, Some(100)),
+      make_challenge("B", "web", ChallengeStatus::Unsolved, Some(200)),
+      make_challenge("C", "pwn", ChallengeStatus::Solved, Some(300)),
+      make_challenge("D", "rev", ChallengeStatus::InProgress, Some(150)),
+    ]);
+    assert_eq!(app.solved_count(), 2);
+  }
+
+  #[test]
+  fn solved_count_with_none_solved() {
+    let app = make_app(vec![
+      make_challenge("A", "crypto", ChallengeStatus::Unsolved, Some(100)),
+      make_challenge("B", "web", ChallengeStatus::InProgress, Some(200)),
+    ]);
+    assert_eq!(app.solved_count(), 0);
+  }
+
+  #[test]
+  fn solved_count_empty_state() {
+    let app = make_app(vec![]);
+    assert_eq!(app.solved_count(), 0);
+  }
+
+  // ── total_points tests ───────────────────────────────────────────────────
+
+  #[test]
+  fn total_points_sums_only_solved() {
+    let app = make_app(vec![
+      make_challenge("A", "crypto", ChallengeStatus::Solved, Some(100)),
+      make_challenge("B", "web", ChallengeStatus::Unsolved, Some(200)),
+      make_challenge("C", "pwn", ChallengeStatus::Solved, Some(300)),
+    ]);
+    assert_eq!(app.total_points(), 400);
+  }
+
+  #[test]
+  fn total_points_zero_when_none_solved() {
+    let app = make_app(vec![
+      make_challenge("A", "crypto", ChallengeStatus::Unsolved, Some(100)),
+    ]);
+    assert_eq!(app.total_points(), 0);
+  }
+
+  #[test]
+  fn total_points_skips_none_points() {
+    let app = make_app(vec![
+      make_challenge("A", "crypto", ChallengeStatus::Solved, None),
+      make_challenge("B", "web", ChallengeStatus::Solved, Some(200)),
+    ]);
+    assert_eq!(app.total_points(), 200);
+  }
+
+  // ── sorted_challenges tests ──────────────────────────────────────────────
+
+  #[test]
+  fn sorted_challenges_by_status_then_category_then_name() {
+    let app = make_app(vec![
+      make_challenge("Zebra", "crypto", ChallengeStatus::Solved, Some(100)),
+      make_challenge("Alpha", "web", ChallengeStatus::Unsolved, Some(200)),
+      make_challenge("Beta", "crypto", ChallengeStatus::Unsolved, Some(150)),
+      make_challenge("Gamma", "crypto", ChallengeStatus::InProgress, Some(300)),
+    ]);
+    let sorted = app.sorted_challenges();
+    // InProgress first, then Unsolved, then Solved
+    assert_eq!(sorted[0].name, "Gamma"); // InProgress
+    // Unsolved: crypto before web
+    assert_eq!(sorted[1].name, "Beta"); // Unsolved, crypto
+    assert_eq!(sorted[2].name, "Alpha"); // Unsolved, web
+    assert_eq!(sorted[3].name, "Zebra"); // Solved
+  }
+
+  // ── categories tests ─────────────────────────────────────────────────────
+
+  #[test]
+  fn categories_groups_correctly() {
+    let app = make_app(vec![
+      make_challenge("A", "crypto", ChallengeStatus::Solved, Some(100)),
+      make_challenge("B", "crypto", ChallengeStatus::Unsolved, Some(200)),
+      make_challenge("C", "web", ChallengeStatus::Solved, Some(150)),
+    ]);
+    let cats = app.categories();
+    // BTreeMap so categories are sorted alphabetically
+    assert_eq!(cats.len(), 2);
+    assert_eq!(cats[0], ("crypto".into(), 1, 2)); // 1 solved, 2 total
+    assert_eq!(cats[1], ("web".into(), 1, 1)); // 1 solved, 1 total
+  }
+
+  // ── handle_key tests ─────────────────────────────────────────────────────
+
+  #[test]
+  fn handle_key_q_quits() {
+    let mut app = make_app(vec![]);
+    let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
+    app.handle_key(key);
+    assert!(app.should_quit);
+  }
+
+  #[test]
+  fn handle_key_esc_quits() {
+    let mut app = make_app(vec![]);
+    let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+    app.handle_key(key);
+    assert!(app.should_quit);
+  }
+
+  #[test]
+  fn handle_key_tab_cycles_panel() {
+    let mut app = make_app(vec![]);
+    assert_eq!(app.active_panel, ActivePanel::Challenges);
+
+    let tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+    app.handle_key(tab);
+    assert_eq!(app.active_panel, ActivePanel::Queue);
+
+    app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+    assert_eq!(app.active_panel, ActivePanel::Notifications);
+
+    app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+    assert_eq!(app.active_panel, ActivePanel::Challenges);
+  }
+
+  #[test]
+  fn handle_key_scroll_down_increments() {
+    let mut app = make_app(vec![
+      make_challenge("A", "crypto", ChallengeStatus::Unsolved, Some(100)),
+      make_challenge("B", "web", ChallengeStatus::Unsolved, Some(200)),
+      make_challenge("C", "pwn", ChallengeStatus::Unsolved, Some(300)),
+    ]);
+    assert_eq!(app.challenge_scroll, 0);
+
+    let down = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+    app.handle_key(down);
+    assert_eq!(app.challenge_scroll, 1);
+
+    app.handle_key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
+    assert_eq!(app.challenge_scroll, 2);
+
+    // Should not go beyond len-1
+    app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    assert_eq!(app.challenge_scroll, 2);
+  }
+
+  #[test]
+  fn handle_key_scroll_up_decrements() {
+    let mut app = make_app(vec![
+      make_challenge("A", "crypto", ChallengeStatus::Unsolved, Some(100)),
+      make_challenge("B", "web", ChallengeStatus::Unsolved, Some(200)),
+    ]);
+    app.challenge_scroll = 1;
+
+    let up = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
+    app.handle_key(up);
+    assert_eq!(app.challenge_scroll, 0);
+
+    // Should not go below 0
+    app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
+    assert_eq!(app.challenge_scroll, 0);
+  }
+}

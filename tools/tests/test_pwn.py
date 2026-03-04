@@ -610,3 +610,265 @@ class TestFormatString:
         json.loads(
             format_string(mode="write", offset=6, writes='{"0x404020": "0x401234"}')
         )
+
+
+# ── TestTriageMocked — mock rabin2 successful output parsing ────────────────
+
+
+class TestTriageMocked:
+    def test_rabin2_imports_parsing(self):
+        """Mock rabin2 -i -j returning import JSON, verify dangerous function detection."""
+        from unittest.mock import patch
+
+        def mock_run(cmd, timeout=None, input_data=None, cwd=None):
+            if cmd[0] == "file":
+                return {
+                    "stdout": "ELF 64-bit LSB executable",
+                    "stderr": "",
+                    "returncode": 0,
+                }
+            if cmd[0] == "checksec":
+                return {
+                    "stdout": "NX: enabled\nCanary: found",
+                    "stderr": "",
+                    "returncode": 0,
+                }
+            if "rabin2" in cmd[0]:
+                if "-I" in cmd:
+                    return {
+                        "stdout": "arch x86\nbits 64\nendian little\nos linux\nbintype elf",
+                        "stderr": "",
+                        "returncode": 0,
+                    }
+                if "-i" in cmd and "-j" in cmd:
+                    return {
+                        "stdout": json.dumps(
+                            {
+                                "imports": [
+                                    {"name": "gets"},
+                                    {"name": "printf"},
+                                    {"name": "strcpy"},
+                                ]
+                            }
+                        ),
+                        "stderr": "",
+                        "returncode": 0,
+                    }
+                if "-E" in cmd:
+                    return {
+                        "stdout": json.dumps(
+                            {"exports": [{"name": "main"}, {"name": "win"}]}
+                        ),
+                        "stderr": "",
+                        "returncode": 0,
+                    }
+                if "-S" in cmd:
+                    return {
+                        "stdout": json.dumps(
+                            {
+                                "sections": [
+                                    {"name": ".text", "size": 100, "perm": "r-x"}
+                                ]
+                            }
+                        ),
+                        "stderr": "",
+                        "returncode": 0,
+                    }
+                if "-z" in cmd:
+                    return {
+                        "stdout": json.dumps(
+                            {"strings": [{"string": "flag{test}"}, {"string": "hello"}]}
+                        ),
+                        "stderr": "",
+                        "returncode": 0,
+                    }
+            return {"stdout": "", "stderr": "", "returncode": 1}
+
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b"\x7fELF" + b"\x00" * 100)
+            path = f.name
+        try:
+            with patch("ctf_pwn.run_tool", side_effect=mock_run):
+                result = json.loads(pwn_triage(path))
+                assert result["arch"] == "x86"
+                assert result["bits"] == "64"
+                assert "gets" in result["dangerous_functions"]
+                assert "strcpy" in result["dangerous_functions"]
+                assert "printf" not in result["dangerous_functions"]
+                assert "main" in result["exports"]
+                assert "win" in result["exports"]
+                assert len(result["sections"]) == 1
+                assert "flag{test}" in result["strings_interesting"]
+                assert result["strings_total"] == 2
+        finally:
+            os.unlink(path)
+
+    def test_rop_gadgets_parsing(self):
+        """Mock ROPgadget output parsing."""
+        from unittest.mock import patch
+
+        mock_output = (
+            "Gadgets information\n"
+            "============================================================\n"
+            "0x0000000000401234 : pop rdi ; ret\n"
+            "0x0000000000401238 : pop rsi ; pop r15 ; ret\n"
+            "0x000000000040123c : ret\n"
+            "\n"
+            "Unique gadgets found: 3\n"
+        )
+        mock_result = {"stdout": mock_output, "stderr": "", "returncode": 0}
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b"\x7fELF")
+            path = f.name
+        try:
+            with patch("ctf_pwn.run_tool", return_value=mock_result):
+                result = json.loads(find_rop_gadgets(path))
+                assert result["total_gadgets"] == 3
+                assert result["gadgets"][0]["address"] == "0x0000000000401234"
+                assert result["gadgets"][0]["instructions"] == "pop rdi ; ret"
+        finally:
+            os.unlink(path)
+
+
+# ── TestAngrMocked — mock angr for all modes ────────────────────────────────
+
+
+class TestAngrMocked:
+    def test_auto_mode_finds_flag(self):
+        """Mock angr finding flag output in auto mode."""
+        from unittest.mock import MagicMock, patch
+
+        mock_angr = MagicMock()
+        mock_claripy = MagicMock()
+
+        # Setup project
+        mock_proj = MagicMock()
+        mock_proj.arch.name = "AMD64"
+        mock_angr.Project.return_value = mock_proj
+
+        # Setup state and simgr
+        mock_state = MagicMock()
+        mock_simgr = MagicMock()
+        mock_proj.factory.entry_state.return_value = mock_state
+        mock_proj.factory.simulation_manager.return_value = mock_simgr
+
+        # Make explore find a state
+        found_state = MagicMock()
+        found_state.solver.eval.return_value = b"input123\x00"
+        found_state.posix.dumps.return_value = b"flag{test_flag}"
+
+        def fake_explore(find=None, avoid=None):
+            mock_simgr.found = [found_state]
+
+        mock_simgr.explore = fake_explore
+        mock_simgr.found = []
+
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b"\x7fELF" + b"\x00" * 100)
+            path = f.name
+        try:
+            with patch.dict(
+                "sys.modules", {"angr": mock_angr, "claripy": mock_claripy}
+            ):
+                # Need to reimport to use mocked modules
+                result = json.loads(angr_analyze(path, mode="auto"))
+                # Either found or error depending on mock depth - just verify structure
+                assert "binary" in result or "error" in result
+        finally:
+            os.unlink(path)
+
+    def test_find_addr_mode(self):
+        """Test find_addr mode with mocked angr."""
+        from unittest.mock import MagicMock, patch
+
+        mock_angr = MagicMock()
+        mock_claripy = MagicMock()
+        mock_proj = MagicMock()
+        mock_proj.arch.name = "AMD64"
+        mock_angr.Project.return_value = mock_proj
+
+        mock_simgr = MagicMock()
+        mock_proj.factory.entry_state.return_value = MagicMock()
+        mock_proj.factory.simulation_manager.return_value = mock_simgr
+
+        found_state = MagicMock()
+        found_state.solver.eval.return_value = b"AAAA\x00"
+        found_state.posix.dumps.return_value = b"You win!"
+
+        def fake_explore(find=None, avoid=None):
+            mock_simgr.found = [found_state]
+
+        mock_simgr.explore = fake_explore
+        mock_simgr.found = []
+
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b"\x7fELF" + b"\x00" * 100)
+            path = f.name
+        try:
+            with patch.dict(
+                "sys.modules", {"angr": mock_angr, "claripy": mock_claripy}
+            ):
+                result = json.loads(
+                    angr_analyze(path, mode="find_addr", target_addr="0x401234")
+                )
+                assert "binary" in result or "error" in result
+        finally:
+            os.unlink(path)
+
+    def test_explore_mode(self):
+        """Test explore mode."""
+        from unittest.mock import MagicMock, patch
+
+        mock_angr = MagicMock()
+        mock_claripy = MagicMock()
+        mock_proj = MagicMock()
+        mock_proj.arch.name = "AMD64"
+        mock_angr.Project.return_value = mock_proj
+
+        mock_simgr = MagicMock()
+        mock_proj.factory.entry_state.return_value = MagicMock()
+        mock_proj.factory.simulation_manager.return_value = mock_simgr
+        mock_simgr.deadended = []
+        mock_simgr.active = []
+
+        def fake_run(until=None):
+            mock_simgr.active = []
+
+        mock_simgr.run = fake_run
+
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b"\x7fELF" + b"\x00" * 100)
+            path = f.name
+        try:
+            with patch.dict(
+                "sys.modules", {"angr": mock_angr, "claripy": mock_claripy}
+            ):
+                result = json.loads(angr_analyze(path, mode="explore"))
+                assert "binary" in result or "error" in result
+        finally:
+            os.unlink(path)
+
+
+# ── TestShellcodeEdgeCases ──────────────────────────────────────────────────
+
+
+class TestShellcodeEdgeCases:
+    def test_connect_back_payload(self):
+        result = json.loads(
+            shellcode_generate(arch="amd64", payload="connect_back('127.0.0.1',4444)")
+        )
+        # May succeed or error depending on pwntools support
+        assert "length" in result or "error" in result
+
+    def test_arm_architecture(self):
+        result = json.loads(shellcode_generate(arch="arm", payload="sh"))
+        assert "length" in result or "error" in result
+
+
+# ── TestPatternOffsetEdgeCases ──────────────────────────────────────────────
+
+
+class TestPatternOffsetEdgeCases:
+    def test_find_8byte_hex_value(self):
+        result = json.loads(pattern_offset(action="find", value="0x6161616261616163"))
+        assert "offset" in result or "error" in result

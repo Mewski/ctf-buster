@@ -206,3 +206,28 @@ class TestSafeReadFile:
             assert isinstance(data, bytes)
         finally:
             os.unlink(path)
+
+
+# ── TestRunToolEdgeCases ────────────────────────────────────────────────────
+
+
+class TestRunToolEdgeCases:
+    def test_command_not_found(self):
+        result = run_tool(["nonexistent_command_xyz_12345"])
+        assert result["returncode"] == -1
+        assert "not found" in result.get("error", "").lower()
+
+
+# ── TestSafeReadFileEdgeCases ───────────────────────────────────────────────
+
+
+class TestSafeReadFileEdgeCases:
+    def test_oversized_file_raises(self):
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b"x" * 1000)
+            path = f.name
+        try:
+            with pytest.raises(ValueError, match="too large"):
+                safe_read_file(path, max_size=500)
+        finally:
+            os.unlink(path)

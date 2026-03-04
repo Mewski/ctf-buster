@@ -471,3 +471,126 @@ class TestJsonOutput:
     def test_gdb_checksec_runtime_always_json(self):
         raw = gdb_checksec_runtime("/dev/null")
         json.loads(raw)
+
+
+# ── TestGdbOutputParsing — mock-based GDB output parsing tests ──────────────
+
+
+class TestGdbOutputParsing:
+    """Test GDB output parsing with mocked GDB output."""
+
+    def test_break_inspect_snapshot_parsing(self):
+        """Mock GDB output with breakpoint markers and verify snapshot parsing."""
+        from unittest.mock import patch
+
+        gdb_output = (
+            "Breakpoint 1, main () at test.c:5\n"
+            "===BREAKPOINT_0_main===\n"
+            "rax            0x401234            4198964\n"
+            "rbp            0x7fffffffde90      0x7fffffffde90\n"
+            "rsp            0x7fffffffde80      0x7fffffffde80\n"
+            "===STACK===\n"
+            "0x7fffffffde80: 0x00000001\n"
+            "===BACKTRACE===\n"
+            "#0  0x0000000000401234 in main ()\n"
+        )
+        mock_result = {"stdout": gdb_output, "stderr": "", "returncode": 0}
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as f:
+            f.write(b"\x7fELF" + b"\x00" * 100)
+            path = f.name
+        try:
+            # We need to mock _run_gdb rather than run_tool since it handles temp files
+            with patch("ctf_gdb._run_gdb", return_value=mock_result):
+                result = json.loads(gdb_break_inspect(path, breakpoints=["main"]))
+                assert len(result["snapshots"]) == 1
+                assert "rax" in result["snapshots"][0]["registers"]
+                assert result["snapshots"][0]["registers"]["rax"]["hex"] == "0x401234"
+        finally:
+            os.unlink(path)
+
+    def test_trace_input_sigsegv_detection(self):
+        """Mock GDB SIGSEGV output and verify crash detection."""
+        from unittest.mock import patch
+
+        gdb_output = (
+            "Program received signal SIGSEGV, Segmentation fault.\n"
+            "0x0000000041414141 in ?? ()\n"
+            "===CRASH_INFO===\n"
+            "rax            0x0                 0\n"
+            "rip            0x41414141          0x41414141\n"
+            "===STACK===\n"
+            "0x7fffffffde80: 0x41414141\n"
+            "===BACKTRACE===\n"
+            "#0  0x0000000041414141 in ?? ()\n"
+        )
+        mock_result = {"stdout": gdb_output, "stderr": "", "returncode": 0}
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as f:
+            f.write(b"\x7fELF" + b"\x00" * 100)
+            path = f.name
+        try:
+            with patch("ctf_gdb._run_gdb", return_value=mock_result):
+                with patch("ctf_gdb._write_temp", return_value="/tmp/fake_stdin"):
+                    with patch("os.unlink"):
+                        result = json.loads(gdb_trace_input(path))
+                        assert result["signal"] == "SIGSEGV"
+                        assert result["crash_address"] == "0x0000000041414141"
+        finally:
+            os.unlink(path)
+
+    def test_checksec_runtime_mappings_parsing(self):
+        """Mock GDB process mappings output."""
+        from unittest.mock import patch
+
+        gdb_output = (
+            "Breakpoint 1, main () at test.c:5\n"
+            "===MAPPINGS===\n"
+            "0x400000 0x401000 0x1000 r-xp /usr/bin/test\n"
+            "0x7f1234000000 0x7f1234200000 0x200000 r-xp /lib/x86_64-linux-gnu/libc.so.6\n"
+            "===PLT===\n"
+            "0x401030  puts@plt\n"
+            "===REGISTERS===\n"
+            "rax            0x401234            4198964\n"
+            "===SYMBOLS===\n"
+            'Symbol "system" is at 0x7f1234050d60\n'
+        )
+        mock_result = {"stdout": gdb_output, "stderr": "", "returncode": 0}
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as f:
+            f.write(b"\x7fELF" + b"\x00" * 100)
+            path = f.name
+        try:
+            with patch("ctf_gdb._run_gdb", return_value=mock_result):
+                result = json.loads(gdb_checksec_runtime(path, symbols=["system"]))
+                assert "libc_base" in result
+                assert result["libc_base"] == "0x7f1234000000"
+                assert result["resolved_symbols"]["system"] == "0x7f1234050d60"
+        finally:
+            os.unlink(path)
+
+    def test_memory_dump_parsing(self):
+        """Mock GDB memory dump output."""
+        from unittest.mock import patch
+
+        gdb_output = (
+            "Breakpoint 1, main () at test.c:5\n"
+            "===DUMP_0x404000:64===\n"
+            "0x404000:\t0x48\t0x65\t0x6c\t0x6c\n"
+            "===ASCII_0x404000:64===\n"
+            "0x404000:\t72 'H'\t101 'e'\t108 'l'\t108 'l'\n"
+        )
+        mock_result = {"stdout": gdb_output, "stderr": "", "returncode": 0}
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as f:
+            f.write(b"\x7fELF" + b"\x00" * 100)
+            path = f.name
+        try:
+            with patch("ctf_gdb._run_gdb", return_value=mock_result):
+                result = json.loads(
+                    gdb_memory_dump(path, breakpoint="main", addresses=["0x404000:64"])
+                )
+                assert len(result["memory"]) == 1
+                assert "hex_dump" in result["memory"][0]
+        finally:
+            os.unlink(path)

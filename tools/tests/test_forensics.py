@@ -713,3 +713,214 @@ class TestVolatility:
                 json.loads(volatility(path))
         finally:
             os.unlink(path)
+
+
+# ── TestStegoMocked — mock stego helper functions ───────────────────────────
+
+
+class TestStegoMocked:
+    def test_stego_png_zsteg_findings(self):
+        """Mock zsteg finding data in a PNG."""
+        from unittest.mock import patch
+
+        def mock_run(cmd, timeout=None, input_data=None, cwd=None):
+            if cmd[0] == "file":
+                return {"stdout": "image/png", "stderr": "", "returncode": 0}
+            if cmd[0] == "zsteg":
+                return {
+                    "stdout": "b1,rgb,lsb,xy .. flag{hidden_in_lsb}\nb2,rgb,msb,xy .. ~.~.~noise~.~",
+                    "stderr": "",
+                    "returncode": 0,
+                }
+            return {"stdout": "", "stderr": "", "returncode": 1}
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as f:
+            f.write(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
+            path = f.name
+        try:
+            with patch("ctf_forensics.run_tool", side_effect=mock_run):
+                # Need to also mock safe_read_file for trailing data check
+                with patch(
+                    "ctf_forensics.safe_read_file",
+                    return_value=b"\x89PNG" + b"\x00" * 100,
+                ):
+                    result = json.loads(stego_analyze(path))
+                    assert len(result["findings"]) >= 1
+                    # The flag finding should have high confidence
+                    flag_finding = [
+                        f
+                        for f in result["findings"]
+                        if "flag" in f.get("data", "").lower()
+                    ]
+                    assert len(flag_finding) > 0
+                    assert flag_finding[0]["confidence"] == 0.9
+        finally:
+            os.unlink(path)
+
+    def test_stego_jpeg_exif_comment(self):
+        """Mock JPEG EXIF comment extraction."""
+        from unittest.mock import patch
+
+        def mock_run(cmd, timeout=None, input_data=None, cwd=None):
+            if cmd[0] == "file":
+                return {"stdout": "image/jpeg", "stderr": "", "returncode": 0}
+            if cmd[0] == "exiftool":
+                return {"stdout": "Secret message here", "stderr": "", "returncode": 0}
+            if cmd[0] == "steghide":
+                return {"stdout": "", "stderr": "could not extract", "returncode": 1}
+            return {"stdout": "", "stderr": "", "returncode": 1}
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as f:
+            f.write(b"\xff\xd8\xff\xe0" + b"\x00" * 50 + b"\xff\xd9")
+            path = f.name
+        try:
+            with patch("ctf_forensics.run_tool", side_effect=mock_run):
+                with patch(
+                    "ctf_forensics.safe_read_file",
+                    return_value=b"\xff\xd8\xff\xe0" + b"\x00" * 50 + b"\xff\xd9",
+                ):
+                    result = json.loads(stego_analyze(path))
+                    exif_findings = [
+                        f
+                        for f in result["findings"]
+                        if f.get("method") == "EXIF_comment"
+                    ]
+                    assert len(exif_findings) > 0
+                    assert "Secret message" in exif_findings[0]["data"]
+        finally:
+            os.unlink(path)
+
+    def test_stego_audio_strings(self):
+        """Mock audio stego analysis."""
+        from unittest.mock import patch
+
+        def mock_run(cmd, timeout=None, input_data=None, cwd=None):
+            if cmd[0] == "file":
+                return {"stdout": "audio/wav", "stderr": "", "returncode": 0}
+            if cmd[0] == "strings":
+                return {
+                    "stdout": "flag{audio_hidden}\nsome other text\n",
+                    "stderr": "",
+                    "returncode": 0,
+                }
+            if cmd[0] == "steghide":
+                return {"stdout": "", "stderr": "not supported", "returncode": 1}
+            return {"stdout": "", "stderr": "", "returncode": 1}
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
+            f.write(b"RIFF" + b"\x00" * 100)
+            path = f.name
+        try:
+            with patch("ctf_forensics.run_tool", side_effect=mock_run):
+                result = json.loads(stego_analyze(path))
+                string_findings = [
+                    f for f in result["findings"] if "flag" in f.get("data", "").lower()
+                ]
+                assert len(string_findings) > 0
+        finally:
+            os.unlink(path)
+
+    def test_stego_gif_comment(self):
+        """Mock GIF comment extraction."""
+        from unittest.mock import patch
+
+        def mock_run(cmd, timeout=None, input_data=None, cwd=None):
+            if cmd[0] == "file":
+                return {"stdout": "image/gif", "stderr": "", "returncode": 0}
+            if cmd[0] == "exiftool":
+                if "-FrameCount" in cmd:
+                    return {"stdout": "3", "stderr": "", "returncode": 0}
+                if "-Comment" in cmd:
+                    return {
+                        "stdout": "Hidden comment data",
+                        "stderr": "",
+                        "returncode": 0,
+                    }
+            return {"stdout": "", "stderr": "", "returncode": 1}
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".gif") as f:
+            f.write(b"GIF89a" + b"\x00" * 100)
+            path = f.name
+        try:
+            with patch("ctf_forensics.run_tool", side_effect=mock_run):
+                result = json.loads(stego_analyze(path))
+                comment_findings = [
+                    f for f in result["findings"] if f.get("method") == "GIF_comment"
+                ]
+                assert len(comment_findings) > 0
+                frame_findings = [
+                    f
+                    for f in result["findings"]
+                    if "multi_frame" in f.get("method", "")
+                ]
+                assert len(frame_findings) > 0
+        finally:
+            os.unlink(path)
+
+    def test_triage_exiftool_metadata(self):
+        """Mock exiftool returning interesting metadata."""
+        from unittest.mock import patch
+
+        def mock_run(cmd, timeout=None, input_data=None, cwd=None):
+            if cmd[0] == "file":
+                if "--mime-type" in cmd:
+                    return {"stdout": "image/png", "stderr": "", "returncode": 0}
+                return {"stdout": "PNG image data", "stderr": "", "returncode": 0}
+            if cmd[0] == "exiftool":
+                return {
+                    "stdout": json.dumps(
+                        [
+                            {
+                                "Comment": "flag{metadata}",
+                                "ImageWidth": 100,
+                                "SomeField": "normal",
+                            }
+                        ]
+                    ),
+                    "stderr": "",
+                    "returncode": 0,
+                }
+            if cmd[0] == "binwalk":
+                return {"stdout": "", "stderr": "", "returncode": 0}
+            if cmd[0] == "strings":
+                return {"stdout": "", "stderr": "", "returncode": 0}
+            return {"stdout": "", "stderr": "", "returncode": 0}
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as f:
+            f.write(b"\x89PNG" + b"\x00" * 100)
+            path = f.name
+        try:
+            with patch("ctf_forensics.run_tool", side_effect=mock_run):
+                with patch(
+                    "ctf_forensics.safe_read_file",
+                    return_value=b"\x89PNG" + b"\x00" * 100,
+                ):
+                    result = json.loads(file_triage(path))
+                    assert "Comment" in result.get("metadata", {})
+                    assert result["metadata"]["Comment"] == "flag{metadata}"
+        finally:
+            os.unlink(path)
+
+    def test_volatility_space_separated_text(self):
+        """Test volatility text parsing with space-separated output."""
+        from unittest.mock import patch
+
+        json_fail = {"stdout": "", "stderr": "", "returncode": 1}
+        text_output = "PID Name Offset\n4 System 0x12345\n100 svchost 0x67890\n"
+        text_result = {"stdout": text_output, "stderr": "", "returncode": 0}
+
+        def mock_run(cmd, timeout=None, input_data=None, cwd=None):
+            if "-r" in cmd:
+                return json_fail
+            return text_result
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".raw") as f:
+            f.write(b"\x00" * 100)
+            path = f.name
+        try:
+            with patch("ctf_forensics.run_tool", side_effect=mock_run):
+                result = json.loads(volatility(path))
+                assert result["renderer"] == "text"
+                assert result["row_count"] == 2
+        finally:
+            os.unlink(path)

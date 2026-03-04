@@ -376,3 +376,195 @@ class TestJsonOutput:
     def test_r2_diff_always_json(self):
         raw = rev_diff("/dev/null", "/dev/null")
         json.loads(raw)
+
+
+# ── TestRevMocked — mock-based r2 output parsing tests ──────────────────────
+
+
+class TestRevMocked:
+    def test_functions_with_callrefs(self):
+        """Mock r2 function list with call references."""
+        from unittest.mock import patch
+
+        r2_output = json.dumps(
+            [
+                {
+                    "name": "main",
+                    "offset": 0x401000,
+                    "size": 100,
+                    "nbbs": 5,
+                    "callrefs": [{"addr": 0x401100, "type": "CALL"}],
+                },
+                {"name": "helper", "offset": 0x401100, "size": 50, "nbbs": 2},
+            ]
+        )
+        mock_result = {"stdout": r2_output, "stderr": "", "returncode": 0}
+
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b"\x7fELF" + b"\x00" * 100)
+            path = f.name
+        try:
+            with patch("ctf_rev.run_tool", return_value=mock_result):
+                result = json.loads(rev_functions(path))
+                assert result["function_count"] == 2
+                assert result["functions"][0]["name"] == "main"
+                assert len(result["functions"][0]["calls"]) == 1
+                assert result["functions"][0]["calls"][0]["address"] == "0x401100"
+        finally:
+            os.unlink(path)
+
+    def test_decompile_success(self):
+        """Mock r2 successful decompilation."""
+        from unittest.mock import patch
+
+        decompiled_code = (
+            "void main(void) {\n  char buf[64];\n  gets(buf);\n  return;\n}"
+        )
+        call_count = [0]
+
+        def mock_run(cmd, timeout=None, input_data=None, cwd=None):
+            call_count[0] += 1
+            if "pdg" in cmd[-2]:  # decompile command
+                return {"stdout": decompiled_code, "stderr": "", "returncode": 0}
+            if "?v" in cmd[-2]:  # address query
+                return {"stdout": "0x401000", "stderr": "", "returncode": 0}
+            return {"stdout": "", "stderr": "", "returncode": 0}
+
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b"\x7fELF" + b"\x00" * 100)
+            path = f.name
+        try:
+            with patch("ctf_rev.run_tool", side_effect=mock_run):
+                result = json.loads(rev_decompile(path))
+                assert result["decompiler"] == "r2ghidra"
+                assert "gets(buf)" in result["code"]
+        finally:
+            os.unlink(path)
+
+    def test_strings_xrefs_parsing(self):
+        """Mock r2 strings with cross-references."""
+        from unittest.mock import patch
+
+        call_count = [0]
+
+        def mock_run(cmd, timeout=None, input_data=None, cwd=None):
+            call_count[0] += 1
+            cmd_str = cmd[-2] if len(cmd) > 2 else ""
+            if "izj" in cmd_str:
+                return {
+                    "stdout": json.dumps(
+                        [
+                            {
+                                "string": "Enter password:",
+                                "vaddr": 0x402000,
+                                "section": ".rodata",
+                                "type": "ascii",
+                                "size": 15,
+                            },
+                            {
+                                "string": "flag{test}",
+                                "vaddr": 0x402020,
+                                "section": ".rodata",
+                                "type": "ascii",
+                                "size": 10,
+                            },
+                        ]
+                    ),
+                    "stderr": "",
+                    "returncode": 0,
+                }
+            if "axtj" in cmd_str:
+                return {
+                    "stdout": json.dumps(
+                        [
+                            {
+                                "from": 0x401050,
+                                "addr": 0x402000,
+                                "type": "DATA",
+                                "fcn_name": "main",
+                                "opcode": "lea rdi, [0x402000]",
+                            }
+                        ]
+                    ),
+                    "stderr": "",
+                    "returncode": 0,
+                }
+            return {"stdout": "", "stderr": "", "returncode": 0}
+
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b"\x7fELF" + b"\x00" * 100)
+            path = f.name
+        try:
+            with patch("ctf_rev.run_tool", side_effect=mock_run):
+                result = json.loads(rev_strings_xrefs(path))
+                assert result["count"] == 2
+                assert result["strings"][0]["string"] == "Enter password:"
+        finally:
+            os.unlink(path)
+
+    def test_cfg_block_parsing(self):
+        """Mock r2 CFG with blocks, jumps, and fails."""
+        from unittest.mock import patch
+
+        cfg_data = json.dumps(
+            [
+                {
+                    "offset": 0x401000,
+                    "size": 20,
+                    "jump": 0x401020,
+                    "fail": 0x401040,
+                    "ops": [
+                        {"offset": 0x401000, "disasm": "cmp eax, 0", "type": "cmp"},
+                        {"offset": 0x401004, "disasm": "je 0x401020", "type": "cjmp"},
+                    ],
+                },
+                {
+                    "offset": 0x401020,
+                    "size": 10,
+                    "ops": [
+                        {"offset": 0x401020, "disasm": "call sym.win", "type": "call"}
+                    ],
+                },
+            ]
+        )
+        mock_result = {"stdout": cfg_data, "stderr": "", "returncode": 0}
+
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b"\x7fELF" + b"\x00" * 100)
+            path = f.name
+        try:
+            with patch("ctf_rev.run_tool", return_value=mock_result):
+                result = json.loads(rev_cfg(path))
+                assert result["block_count"] == 2
+                assert result["blocks"][0]["jump"] == "0x401020"
+                assert result["blocks"][0]["fail"] == "0x401040"
+                assert result["blocks"][0]["instruction_count"] == 2
+        finally:
+            os.unlink(path)
+
+    def test_xrefs_direction_from(self):
+        """Test xrefs with direction='from' only."""
+        from unittest.mock import patch
+
+        xref_data = json.dumps(
+            [
+                {
+                    "from": 0x401000,
+                    "addr": 0x401100,
+                    "type": "CALL",
+                    "opcode": "call sym.helper",
+                }
+            ]
+        )
+        mock_result = {"stdout": xref_data, "stderr": "", "returncode": 0}
+
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b"\x7fELF" + b"\x00" * 100)
+            path = f.name
+        try:
+            with patch("ctf_rev.run_tool", return_value=mock_result):
+                result = json.loads(rev_xrefs(path, target="main", direction="from"))
+                assert len(result["xrefs_from"]) == 1
+                assert len(result["xrefs_to"]) == 0
+        finally:
+            os.unlink(path)

@@ -487,4 +487,86 @@ mod tests {
     assert!(content.contains("A test challenge"));
     assert!(content.contains("**Points:** 100"));
   }
+
+  // ── generate_writeup tests ─────────────────────────────────────────────
+
+  fn make_challenge_state(
+    name: &str,
+    category: &str,
+    points: Option<u32>,
+    flag: Option<&str>,
+    methodology: Option<&str>,
+    tools_used: Option<Vec<&str>>,
+  ) -> crate::workspace::state::ChallengeState {
+    crate::workspace::state::ChallengeState {
+      id: name.to_lowercase().replace(' ', "-"),
+      name: name.into(),
+      category: category.into(),
+      status: crate::workspace::state::ChallengeStatus::Solved,
+      solved_at: None,
+      points,
+      flag: flag.map(|s| s.into()),
+      description: None,
+      hints: None,
+      files: None,
+      tags: None,
+      details_fetched_at: None,
+      methodology: methodology.map(|s| s.into()),
+      tools_used: tools_used.map(|v| v.into_iter().map(|s| s.into()).collect()),
+    }
+  }
+
+  #[test]
+  fn generate_writeup_basic() {
+    let cs = make_challenge_state(
+      "Easy RSA",
+      "crypto",
+      Some(100),
+      Some("flag{rsa_is_fun}"),
+      Some("Factored n using factordb, then computed d and decrypted the ciphertext."),
+      Some(vec!["crypto_rsa_toolkit", "python"]),
+    );
+    let output = generate_writeup(&cs);
+    assert!(output.contains("# Easy RSA -- Writeup"));
+    assert!(output.contains("**Category:** crypto"));
+    assert!(output.contains("**Points:** 100"));
+    assert!(output.contains("**Flag:** `flag{rsa_is_fun}`"));
+    assert!(output.contains("## Methodology"));
+    assert!(output.contains("Factored n using factordb"));
+    assert!(output.contains("## Tools Used"));
+    assert!(output.contains("- crypto_rsa_toolkit"));
+    assert!(output.contains("- python"));
+  }
+
+  #[test]
+  fn generate_writeup_minimal() {
+    let cs = make_challenge_state(
+      "Mystery",
+      "misc",
+      None,
+      None,
+      None,
+      None,
+    );
+    let output = generate_writeup(&cs);
+    assert!(output.contains("# Mystery -- Writeup"));
+    assert!(output.contains("**Category:** misc"));
+    assert!(output.contains("**Points:** ?"));
+    assert!(output.contains("**Flag:** `?`"));
+    // Should NOT contain methodology or tools sections
+    assert!(!output.contains("## Methodology"));
+    assert!(!output.contains("## Tools Used"));
+  }
+
+  #[test]
+  fn save_writeup_file_creates_file() {
+    let dir = TempDir::new().unwrap();
+    let content = "# Test Writeup\n\nSome content here.";
+    save_writeup_file(dir.path(), content).unwrap();
+
+    let writeup_path = dir.path().join("writeup.md");
+    assert!(writeup_path.exists());
+    let read_content = std::fs::read_to_string(&writeup_path).unwrap();
+    assert_eq!(read_content, content);
+  }
 }

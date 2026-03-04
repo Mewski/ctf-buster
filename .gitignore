@@ -10,7 +10,9 @@ __pycache__/
 *.pyc
 .venv/
 .coverage
+.coverage.*
 .pytest_cache/
+htmlcov/
 
 # IDE
 .idea/
