@@ -1,6 +1,6 @@
 # CTF-Buster
 
-AI-powered CTF competition toolkit. Rust CLI + 6 MCP servers (50 tools total).
+AI-powered CTF competition toolkit. Rust CLI + 7 MCP servers (54 tools total).
 
 ## Architecture
 
@@ -11,6 +11,7 @@ ctf-pwn (Python)       — 10 tools: triage, disassembly, ROP, pwntools, angr, f
 ctf-forensics (Python) — 6 tools: file analysis, stego, extraction, entropy, volatility
 ctf-gdb (Python)       — 5 tools: GDB dynamic analysis, breakpoints, input tracing
 ctf-rev (Python)       — 6 tools: decompilation, xrefs, CFG, function analysis
+ctf-jail (Python)      — 4 tools: pyjail/bashjail analysis, bypass payloads, subclass chains
 ```
 
 All servers communicate over MCP stdio transport.
@@ -40,6 +41,7 @@ category_score (tool coverage strength):
   crypto:     +10  (best tool coverage: rsa_toolkit, math_solve, transform_chain)
   forensics:  +10  (best tool coverage: file_triage, stego_analyze, extract_embedded)
   web:        +8   (good with curl/sqlmap/ffuf from bash)
+  jail:       +8   (dedicated pyjail/bashjail analysis and payload generation)
   rev:        +6   (disassemble + angr_analyze cover common patterns)
   misc:       +4   (varies widely)
   pwn:        +2   (often needs interactive exploitation beyond tool scope)
@@ -233,6 +235,16 @@ For parallel execution, launch multiple subagents in a single message using the 
 **Web challenges:** (solve.py has a requests session template — build your exploit there)
 - Use bash directly: curl, sqlmap, ffuf, nuclei, nikto, etc.
 - These tools work well from bash and don't need MCP wrapping
+
+**Jail challenges (pyjail/bashjail):** (solve.py has a pwntools template — test payloads interactively)
+- Read the jail source code first — understand what's filtered
+- `jail_analyze_source` to automatically identify blocked strings, chars, and restriction mechanism
+- `jail_find_subclass_chain` to find Python MRO paths to os/builtins/import
+- `jail_construct_string` to build blocked strings using only allowed characters
+- `jail_build_payload` to generate complete bypass payloads matching restrictions
+- For bash jails: use `jail_build_payload` with `jail_type="bash"` for glob/hex/variable tricks
+- Common Python techniques: subclass chains, chr() string building, getattr(), Unicode NFKC
+- Common bash techniques: $'\xNN' hex, ${PATH:0:1} for /, glob patterns /???/??t
 
 ### 7. Incremental Work & Retries
 

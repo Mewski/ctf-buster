@@ -59,12 +59,16 @@
               angr
               pwntools
               capstone
+              keystone-engine
+              unicorn
               ropgadget
               ropper
 
               # Used by ctf_forensics MCP server
               numpy
               pillow
+              opencv4
+              scapy
 
               # General CTF / scripting
               beautifulsoup4
@@ -85,6 +89,15 @@
             checksec
             radare2
 
+            # Reverse engineering
+            cfr
+            jadx
+            dex2jar
+            apktool
+            cutter
+            iaito
+            rizin
+
             # Used by ctf_forensics MCP server
             binwalk
             exiftool
@@ -98,23 +111,30 @@
             binutils
             elfutils
             gdb
+            lldb
             ghidra
             nasm
             one_gadget
             patchelf
 
             # Web CTF
+            burpsuite
             ffuf
             gobuster
             feroxbuster
             sqlmap
             httpx
+            nikto
+            whatweb
+            dalfox
+            commix
 
             # Crypto / hashing
             haiti
             hash-identifier
             hashcat
             john
+            sage
 
             # Networking
             netcat-gnu
@@ -122,8 +142,13 @@
             socat
             tcpdump
             wireshark-cli
+            masscan
+            rustscan
+            mitmproxy
 
             # Forensics
+            # autopsy  # broken in nixpkgs (sleuthkit jar version mismatch)
+            bulk_extractor
             fcrackzip
             pdfcrack
             sleuthkit
@@ -131,6 +156,21 @@
             volatility3
             xxd
             yara
+
+            # OSINT
+            amass
+            subfinder
+            theharvester
+            sherlock
+            recon-ng
+            gitleaks
+            trufflehog
+
+            # Password attacks
+            hydra
+            medusa
+            crowbar
+            kerbrute
 
             # General utilities
             curl

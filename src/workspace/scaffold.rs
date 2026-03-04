@@ -79,6 +79,7 @@ fn generate_solve_template(challenge: &Challenge) -> String {
     "rev" | "reverse" | "reverse engineering" | "reversing" => rev_template(challenge),
     "web" | "web exploitation" => web_template(challenge),
     "forensics" | "forensic" | "stego" | "steganography" => forensics_template(challenge),
+    "jail" | "jailed" | "pyjail" | "sandbox" | "escape" => jail_template(challenge),
     _ => generic_template(challenge),
   }
 }
@@ -191,6 +192,29 @@ import os
 
 # Use forensics_* MCP tools for analysis, add extraction/decode logic below
 # challenge files in ./dist/
+
+"#,
+    name = challenge.name,
+    category = challenge.category,
+    value = challenge.value,
+  )
+}
+
+fn jail_template(challenge: &Challenge) -> String {
+  format!(
+    r#"#!/usr/bin/env python3
+"""
+{name} ({category}, {value} pts)
+"""
+
+from pwn import *
+
+# REMOTE = ("host", port)  # TODO: set remote target
+# io = remote(*REMOTE)
+
+# Use jail_analyze_source on the jail source code first
+# Then jail_build_payload to generate bypass payloads
+# Test payloads below:
 
 "#,
     name = challenge.name,

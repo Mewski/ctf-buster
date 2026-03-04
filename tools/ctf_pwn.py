@@ -25,7 +25,8 @@ mcp = FastMCP(
 
 # ── pwn_triage ────────────────────────────────────────────────────────────
 
-DANGEROUS_FUNCS = {
+# Categorized dangerous functions for better triage output
+DANGEROUS_FUNCS_OVERFLOW = {
     "gets",
     "scanf",
     "sprintf",
@@ -37,7 +38,32 @@ DANGEROUS_FUNCS = {
     "streadd",
     "strecpy",
     "strtrns",
+    "wcscpy",
+    "wcscat",
+    "swprintf",
 }
+DANGEROUS_FUNCS_FORMAT = {
+    "printf",
+    "fprintf",
+    "dprintf",
+    "sprintf",
+    "snprintf",
+    "vprintf",
+    "vfprintf",
+    "vsprintf",
+    "vsnprintf",
+    "syslog",
+    "vsyslog",
+}
+DANGEROUS_FUNCS_HEAP = {
+    "malloc",
+    "free",
+    "realloc",
+    "calloc",
+}
+DANGEROUS_FUNCS = (
+    DANGEROUS_FUNCS_OVERFLOW | DANGEROUS_FUNCS_FORMAT | DANGEROUS_FUNCS_HEAP
+)
 
 
 def _pwn_triage_impl(path: str) -> str:
@@ -76,7 +102,19 @@ def _pwn_triage_impl(path: str) -> str:
             imports_data = json.loads(r["stdout"])
             imports = [i.get("name", "") for i in imports_data.get("imports", [])]
             result["imports"] = imports
-            result["dangerous_functions"] = [f for f in imports if f in DANGEROUS_FUNCS]
+            dangerous = [f for f in imports if f in DANGEROUS_FUNCS]
+            result["dangerous_functions"] = dangerous
+            if dangerous:
+                result["vuln_categories"] = {}
+                overflow = [f for f in dangerous if f in DANGEROUS_FUNCS_OVERFLOW]
+                fmt = [f for f in dangerous if f in DANGEROUS_FUNCS_FORMAT]
+                heap = [f for f in dangerous if f in DANGEROUS_FUNCS_HEAP]
+                if overflow:
+                    result["vuln_categories"]["buffer_overflow"] = overflow
+                if fmt:
+                    result["vuln_categories"]["format_string"] = fmt
+                if heap:
+                    result["vuln_categories"]["heap"] = heap
         except json.JSONDecodeError:
             result["imports"] = []
 

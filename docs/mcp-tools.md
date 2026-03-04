@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-CTF-Buster provides 50 tools across 6 MCP servers.
+CTF-Buster provides 54 tools across 7 MCP servers.
 
 ## ctf-buster (Rust) -- 15 tools
 
@@ -93,3 +93,14 @@ Deep static analysis using radare2.
 | `rev_strings_xrefs` | List strings with which functions reference them. Optional regex filter (e.g., "flag\|password\|key"). |
 | `rev_cfg` | Extract control flow graph for a function -- basic blocks, instructions, branch targets, and conditions. |
 | `rev_diff` | Compare two binaries to find byte-level differences. Useful for patch analysis challenges. |
+
+## ctf-jail (Python) -- 4 tools
+
+Pyjail and bash jail analysis, bypass payload generation, and subclass chain discovery.
+
+| Tool | Description |
+|------|-------------|
+| `jail_analyze_source` | Parse jail source code to identify blocked strings, chars, restriction mechanisms (blacklist, AST filtering, audit hooks, builtins wiped), and suggest bypasses. |
+| `jail_find_subclass_chain` | Walk Python MRO/subclass tree to find chains reaching a target module (os, builtins, etc.) via `__init__.__globals__`. |
+| `jail_construct_string` | Construct a target string using only allowed characters -- chr(), hex escapes, bytes().decode(), Unicode NFKC, f-strings. |
+| `jail_build_payload` | Generate complete jail bypass payloads (Python or bash) that avoid blocked strings and characters. Supports read_flag, exec_command, get_shell goals. |

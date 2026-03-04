@@ -504,6 +504,7 @@ impl McpServer {
           "forensics" | "forensic" => 10,
           "web" | "web exploitation" => 8,
           "rev" | "reverse" | "reverse engineering" | "reversing" => 6,
+          "jail" | "jailed" | "pyjail" | "sandbox" | "escape" => 8,
           "misc" | "miscellaneous" | "trivia" => 4,
           "pwn" | "binary exploitation" | "exploitation" | "pwnable" => 2,
           _ => 4, // default to misc-level
@@ -674,6 +675,13 @@ Start with rev_functions for an overview, then rev_decompile for pseudocode of k
 - Binary diff: rev_diff for patched vs original\n\
 - Runtime validation: gdb_break_inspect to confirm static analysis\n\
 - Automated solving: pwn_angr_analyze in auto/find_string mode for simple checks",
+        "jail" | "jailed" | "pyjail" | "sandbox" | "escape" => "\
+Read the jail source code first, then use jail_analyze_source to identify restrictions.\n\
+- jail_find_subclass_chain to find MRO paths to os/builtins (Python jails)\n\
+- jail_construct_string to build blocked strings from allowed chars\n\
+- jail_build_payload to generate complete bypass payloads\n\
+For bash jails: jail_build_payload with jail_type='bash' for glob/variable/hex bypass.\n\
+Test payloads interactively against the remote service via pwntools.",
         "pwn" | "binary exploitation" | "exploitation" | "pwnable" => "\
 Use pwn_triage first (checksec, imports, dangerous functions, architecture), then:\n\
 - Buffer overflow: gdb_trace_input (cyclic pattern + crash), pwn_pattern_offset\n\

@@ -12,7 +12,7 @@ workspace.
   track scores on CTFd and rCTF with automatic platform detection.
 - **Workspace management** -- initialize per-competition workspaces with
   scaffolded directories, solve templates, and notes files.
-- **6 MCP servers / 50 tools** -- expose every capability over MCP so AI agents
+- **7 MCP servers / 54 tools** -- expose every capability over MCP so AI agents
   can call them directly.
 - **TUI dashboard** -- run `ctf dashboard` in a separate terminal to monitor
   progress in real-time while the AI orchestrator works.
@@ -27,19 +27,19 @@ workspace.
 ```
                         Claude Code / AI Agent
                                 |
-    +--------+--------+---------+---------+---------+--------+
-    |        |        |                   |         |        |
-ctf-buster ctf-crypto ctf-pwn    ctf-forensics  ctf-gdb  ctf-rev
-  (Rust)   (Python)   (Python)     (Python)     (Python) (Python)
- 15 tools  8 tools   10 tools      6 tools      5 tools  6 tools
-    |          |          |            |            |        |
- CTFd/rCTF  sympy,z3  radare2,pwn  binwalk,    GDB      radare2
- platforms  crypto    ROPgadget    zsteg,PIL   batch     r2ghidra
+    +--------+--------+---------+---------+---------+--------+--------+
+    |        |        |                   |         |        |        |
+ctf-buster ctf-crypto ctf-pwn    ctf-forensics  ctf-gdb  ctf-rev  ctf-jail
+  (Rust)   (Python)   (Python)     (Python)     (Python) (Python) (Python)
+ 15 tools  8 tools   10 tools      6 tools      5 tools  6 tools  4 tools
+    |          |          |            |            |        |        |
+ CTFd/rCTF  sympy,z3  radare2,pwn  binwalk,    GDB      radare2  pyjail
+ platforms  crypto    ROPgadget    zsteg,PIL   batch     r2ghidra bashjail
 ```
 
-All six servers communicate over **stdio** using the Model Context Protocol.
+All seven servers communicate over **stdio** using the Model Context Protocol.
 The Rust server (`ctf-buster`) handles platform interaction, workspace
-management, and orchestration queuing. The five Python servers handle
+management, and orchestration queuing. The six Python servers handle
 domain-specific analysis, built on the
 [FastMCP](https://github.com/jlowin/fastmcp) framework.
 

@@ -26,6 +26,10 @@
     "ctf-rev": {
       "command": "python3",
       "args": ["./tools/ctf_rev.py"]
+    },
+    "ctf-jail": {
+      "command": "python3",
+      "args": ["./tools/ctf_jail.py"]
     }
   }
 }

@@ -700,7 +700,11 @@ class TestTriageMocked:
                 assert result["bits"] == "64"
                 assert "gets" in result["dangerous_functions"]
                 assert "strcpy" in result["dangerous_functions"]
-                assert "printf" not in result["dangerous_functions"]
+                assert (
+                    "printf" in result["dangerous_functions"]
+                )  # printf is a format string risk
+                assert "gets" in result["vuln_categories"]["buffer_overflow"]
+                assert "printf" in result["vuln_categories"]["format_string"]
                 assert "main" in result["exports"]
                 assert "win" in result["exports"]
                 assert len(result["sections"]) == 1

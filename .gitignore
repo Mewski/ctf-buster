@@ -2,8 +2,9 @@
 /target/
 result
 
-# Nix
+# Nix / direnv
 .direnv/
+.envrc
 
 # Python
 __pycache__/

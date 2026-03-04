@@ -2,21 +2,21 @@
 
 ## Overview
 
-CTF-Buster is a Rust CLI + MCP server backed by five Python MCP servers for
-domain-specific analysis. All six servers communicate over stdio using the
+CTF-Buster is a Rust CLI + MCP server backed by six Python MCP servers for
+domain-specific analysis. All seven servers communicate over stdio using the
 Model Context Protocol, allowing AI agents to orchestrate CTF challenge solving.
 
 ```
                         Claude Code / AI Agent
                                 |
-    +--------+--------+---------+---------+---------+--------+
-    |        |        |                   |         |        |
-ctf-buster ctf-crypto ctf-pwn    ctf-forensics  ctf-gdb  ctf-rev
-  (Rust)   (Python)   (Python)     (Python)     (Python) (Python)
- 15 tools  8 tools   10 tools      6 tools      5 tools  6 tools
-    |          |          |            |            |        |
- CTFd/rCTF  sympy,z3  radare2,pwn  binwalk,    GDB      radare2
- platforms  crypto    ROPgadget    zsteg,PIL   batch     r2ghidra
+    +--------+--------+---------+---------+---------+--------+--------+
+    |        |        |                   |         |        |        |
+ctf-buster ctf-crypto ctf-pwn    ctf-forensics  ctf-gdb  ctf-rev  ctf-jail
+  (Rust)   (Python)   (Python)     (Python)     (Python) (Python) (Python)
+ 15 tools  8 tools   10 tools      6 tools      5 tools  6 tools  4 tools
+    |          |          |            |            |        |        |
+ CTFd/rCTF  sympy,z3  radare2,pwn  binwalk,    GDB      radare2  pyjail
+ platforms  crypto    ROPgadget    zsteg,PIL   batch     r2ghidra bashjail
 ```
 
 ## Module Structure
@@ -68,6 +68,7 @@ tools/
   ctf_forensics.py     Forensics & stego MCP server (6 tools, FastMCP)
   ctf_gdb.py           GDB dynamic analysis MCP server (5 tools, FastMCP)
   ctf_rev.py           Reverse engineering MCP server (6 tools, FastMCP)
+  ctf_jail.py          Jail escape MCP server (4 tools, FastMCP)
   lib/
     subprocess_utils.py  Shared utilities: safe subprocess execution, checksec parsing
   tests/
@@ -76,6 +77,7 @@ tools/
     test_forensics.py  Forensics tool tests
     test_gdb.py        GDB tool tests
     test_rev.py        RE tool tests
+    test_jail.py       Jail escape tool tests
     test_subprocess_utils.py  Utility tests
 ```
 
