@@ -767,8 +767,8 @@ impl McpServer {
         "crypto" | "cryptography" => "Use crypto_identify, crypto_transform_chain, crypto_rsa_toolkit, crypto_math_solve. Start with crypto_identify to detect encoding/cipher type.",
         "forensics" | "forensic" => "Use forensics_file_triage, forensics_stego_analyze, forensics_extract_embedded, forensics_entropy_analysis. Start with forensics_file_triage.",
         "web" | "web exploitation" => "Use curl, sqlmap, ffuf from bash. Check source code, headers, cookies, robots.txt.",
-        "rev" | "reverse" | "reverse engineering" | "reversing" => "Use r2_functions, r2_decompile, r2_xrefs, r2_strings_xrefs. Start with r2_functions for an overview, then decompile key functions.",
-        "pwn" | "binary exploitation" | "exploitation" | "pwnable" => "Use binary_triage first, then gdb_break_inspect, gdb_trace_input, binary_angr_analyze. Check for buffer overflows, format strings, use-after-free.",
+        "rev" | "reverse" | "reverse engineering" | "reversing" => "Use rev_functions, rev_decompile, rev_xrefs, rev_strings_xrefs. Start with rev_functions for an overview, then decompile key functions.",
+        "pwn" | "binary exploitation" | "exploitation" | "pwnable" => "Use pwn_triage first, then gdb_break_inspect, gdb_trace_input, pwn_angr_analyze. Check for buffer overflows, format strings, use-after-free.",
         _ => "Use forensics_file_triage on any downloaded files, then choose tools based on content type.",
       };
 

@@ -11,9 +11,9 @@
       "command": "python3",
       "args": ["./tools/ctf_crypto.py"]
     },
-    "ctf-binary": {
+    "ctf-pwn": {
       "command": "python3",
-      "args": ["./tools/ctf_binary.py"]
+      "args": ["./tools/ctf_pwn.py"]
     },
     "ctf-forensics": {
       "command": "python3",
@@ -23,9 +23,9 @@
       "command": "python3",
       "args": ["./tools/ctf_gdb.py"]
     },
-    "ctf-re": {
+    "ctf-rev": {
       "command": "python3",
-      "args": ["./tools/ctf_re.py"]
+      "args": ["./tools/ctf_rev.py"]
     }
   }
 }

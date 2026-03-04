@@ -1,4 +1,4 @@
-"""Tests for ctf_binary.py — pure-Python logic and mocked tool calls."""
+"""Tests for ctf_pwn.py — pure-Python logic and mocked tool calls."""
 
 import json
 import os
@@ -10,17 +10,17 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import ctf_binary
+import ctf_pwn
 
 # Access the underlying functions from FastMCP tool wrappers
-binary_triage = ctf_binary.binary_triage.fn
-_binary_triage_impl = ctf_binary._binary_triage_impl
-disassemble = ctf_binary.binary_disassemble.fn
-find_rop_gadgets = ctf_binary.binary_rop_gadgets.fn
-pattern_offset = ctf_binary.binary_pattern_offset.fn
-shellcode_generate = ctf_binary.binary_shellcode_generate.fn
-pwntools_template = ctf_binary.binary_pwntools_template.fn
-angr_analyze = ctf_binary.binary_angr_analyze.fn
+pwn_triage = ctf_pwn.pwn_triage.fn
+_pwn_triage_impl = ctf_pwn._pwn_triage_impl
+disassemble = ctf_pwn.pwn_disassemble.fn
+find_rop_gadgets = ctf_pwn.pwn_rop_gadgets.fn
+pattern_offset = ctf_pwn.pwn_pattern_offset.fn
+shellcode_generate = ctf_pwn.pwn_shellcode_generate.fn
+pwntools_template = ctf_pwn.pwn_pwntools_template.fn
+angr_analyze = ctf_pwn.pwn_angr_analyze.fn
 
 
 # ── DANGEROUS_FUNCS constant ─────────────────────────────────────────────────
@@ -28,27 +28,27 @@ angr_analyze = ctf_binary.binary_angr_analyze.fn
 
 class TestDangerousFuncs:
     def test_contains_gets(self):
-        assert "gets" in ctf_binary.DANGEROUS_FUNCS
+        assert "gets" in ctf_pwn.DANGEROUS_FUNCS
 
     def test_contains_scanf(self):
-        assert "scanf" in ctf_binary.DANGEROUS_FUNCS
+        assert "scanf" in ctf_pwn.DANGEROUS_FUNCS
 
     def test_contains_strcpy(self):
-        assert "strcpy" in ctf_binary.DANGEROUS_FUNCS
+        assert "strcpy" in ctf_pwn.DANGEROUS_FUNCS
 
     def test_contains_sprintf(self):
-        assert "sprintf" in ctf_binary.DANGEROUS_FUNCS
+        assert "sprintf" in ctf_pwn.DANGEROUS_FUNCS
 
     def test_is_a_set(self):
-        assert isinstance(ctf_binary.DANGEROUS_FUNCS, set)
+        assert isinstance(ctf_pwn.DANGEROUS_FUNCS, set)
 
 
-# ── binary_triage tests ──────────────────────────────────────────────────────
+# ── pwn_triage tests ──────────────────────────────────────────────────────
 
 
 class TestBinaryTriage:
     def test_nonexistent_file(self):
-        result = json.loads(binary_triage("/nonexistent/binary/xyz"))
+        result = json.loads(pwn_triage("/nonexistent/binary/xyz"))
         assert "error" in result
         assert "not found" in result["error"].lower()
 
@@ -57,7 +57,7 @@ class TestBinaryTriage:
             f.write(b"")
             path = f.name
         try:
-            result = json.loads(binary_triage(path))
+            result = json.loads(pwn_triage(path))
             assert "file_type" in result
             assert result["path"] == os.path.realpath(path)
         finally:
@@ -68,7 +68,7 @@ class TestBinaryTriage:
             f.write("Hello world, this is a text file\n")
             path = f.name
         try:
-            result = json.loads(binary_triage(path))
+            result = json.loads(pwn_triage(path))
             assert "file_type" in result
             assert (
                 "text" in result["file_type"].lower() or "ASCII" in result["file_type"]
@@ -81,7 +81,7 @@ class TestBinaryTriage:
             f.write(b"\x7fELF" + b"\x00" * 100)
             path = f.name
         try:
-            raw = binary_triage(path)
+            raw = pwn_triage(path)
             parsed = json.loads(raw)
             assert "path" in parsed
             assert "file_type" in parsed
@@ -95,7 +95,7 @@ class TestBinaryTriage:
         link_path = real_path + ".link"
         try:
             os.symlink(real_path, link_path)
-            result = json.loads(binary_triage(link_path))
+            result = json.loads(pwn_triage(link_path))
             assert result["path"] == os.path.realpath(link_path)
         finally:
             os.unlink(real_path)
@@ -344,7 +344,7 @@ class TestPwntoolsTemplate:
             os.unlink(path)
 
     def test_nonexistent_file(self):
-        # pwntools_template calls binary_triage internally, which handles missing files
+        # pwntools_template calls pwn_triage internally, which handles missing files
         result = json.loads(pwntools_template("/nonexistent/xyz"))
         # Should still produce a template with whatever info it has
         assert "script" in result or "technique" in result
@@ -406,8 +406,8 @@ class TestAngrAnalyze:
 class TestJsonOutput:
     """Every tool must return valid JSON regardless of input."""
 
-    def test_binary_triage_json(self):
-        raw = binary_triage("/dev/null")
+    def test_pwn_triage_json(self):
+        raw = pwn_triage("/dev/null")
         json.loads(raw)
 
     def test_disassemble_json(self):

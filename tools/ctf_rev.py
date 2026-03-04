@@ -11,12 +11,12 @@ from fastmcp import FastMCP
 from subprocess_utils import run_tool
 
 mcp = FastMCP(
-    "ctf-re",
+    "ctf-rev",
     instructions=(
-        "Reverse engineering tools for deep binary analysis. Use r2_functions for "
-        "function discovery, r2_decompile for pseudocode, r2_xrefs to trace call "
-        "graphs, r2_strings_xrefs to find string references in context, and r2_cfg "
-        "for control flow analysis. Start with r2_functions to get an overview."
+        "Reverse engineering tools for deep binary analysis. Use rev_functions for "
+        "function discovery, rev_decompile for pseudocode, rev_xrefs to trace call "
+        "graphs, rev_strings_xrefs to find string references in context, and rev_cfg "
+        "for control flow analysis. Start with rev_functions to get an overview."
     ),
 )
 
@@ -47,7 +47,7 @@ def _parse_r2_json(stdout):
 
 
 @mcp.tool()
-def r2_functions(path: str) -> str:
+def rev_functions(path: str) -> str:
     """List all functions with addresses, sizes, and call targets after full analysis.
 
     Args:
@@ -98,7 +98,7 @@ def r2_functions(path: str) -> str:
 
 
 @mcp.tool()
-def r2_xrefs(path: str, target: str, direction: str = "both") -> str:
+def rev_xrefs(path: str, target: str, direction: str = "both") -> str:
     """Find cross-references to/from a function or address.
 
     Args:
@@ -164,7 +164,7 @@ def r2_xrefs(path: str, target: str, direction: str = "both") -> str:
 
 
 @mcp.tool()
-def r2_decompile(path: str, function: str = "main", decompiler: str = "auto") -> str:
+def rev_decompile(path: str, function: str = "main", decompiler: str = "auto") -> str:
     """Decompile a function to pseudocode.
 
     Tries r2ghidra (pdg), r2dec (pdd), or falls back to annotated disassembly.
@@ -232,7 +232,7 @@ def r2_decompile(path: str, function: str = "main", decompiler: str = "auto") ->
 
 
 @mcp.tool()
-def r2_strings_xrefs(path: str, filter: str = "") -> str:
+def rev_strings_xrefs(path: str, filter: str = "") -> str:
     """List strings with the functions that reference them.
 
     Args:
@@ -304,7 +304,7 @@ def r2_strings_xrefs(path: str, filter: str = "") -> str:
 
 
 @mcp.tool()
-def r2_cfg(path: str, function: str = "main") -> str:
+def rev_cfg(path: str, function: str = "main") -> str:
     """Extract control flow graph for a function.
 
     Args:
@@ -369,7 +369,7 @@ def r2_cfg(path: str, function: str = "main") -> str:
 
 
 @mcp.tool()
-def r2_diff(path1: str, path2: str) -> str:
+def rev_diff(path1: str, path2: str) -> str:
     """Compare two binaries to find differences (patched vs original).
 
     Args:

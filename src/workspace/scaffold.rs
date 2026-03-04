@@ -163,7 +163,7 @@ fn rev_template(challenge: &Challenge) -> String {
 import struct
 import subprocess
 
-# Use r2_* MCP tools for static analysis, write decoder/keygen below
+# Use rev_* MCP tools for static analysis, write decoder/keygen below
 # challenge files in ./dist/
 
 "#,
@@ -445,7 +445,7 @@ mod tests {
     let content = generate_solve_template(&c);
     assert!(!content.contains("from pwn import"));
     assert!(content.contains("import struct"));
-    assert!(content.contains("r2_*"));
+    assert!(content.contains("rev_*"));
   }
 
   #[test]

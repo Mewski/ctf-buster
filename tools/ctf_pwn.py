@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CTF Binary Analysis & Exploit Dev MCP Server — triage, disassembly, ROP, pwntools."""
+"""CTF Pwn / Binary Exploitation MCP Server — triage, disassembly, ROP, pwntools."""
 
 import json
 import os
@@ -12,16 +12,16 @@ from fastmcp import FastMCP
 from lib.subprocess_utils import parse_checksec, run_tool
 
 mcp = FastMCP(
-    "ctf-binary",
+    "ctf-pwn",
     instructions=(
-        "Binary analysis and exploit development tools for CTF challenges. "
-        "Start with binary_triage for a comprehensive overview, then use "
-        "binary_disassemble, binary_rop_gadgets, or binary_pwntools_template as needed."
+        "Binary exploitation (pwn) tools for CTF challenges. "
+        "Start with pwn_triage for a comprehensive overview, then use "
+        "pwn_disassemble, pwn_rop_gadgets, or pwn_pwntools_template as needed."
     ),
 )
 
 
-# ── binary_triage ────────────────────────────────────────────────────────────
+# ── pwn_triage ────────────────────────────────────────────────────────────
 
 DANGEROUS_FUNCS = {
     "gets",
@@ -38,7 +38,7 @@ DANGEROUS_FUNCS = {
 }
 
 
-def _binary_triage_impl(path: str) -> str:
+def _pwn_triage_impl(path: str) -> str:
     """Internal implementation of binary_triage (callable without MCP decorator)."""
     path = os.path.realpath(path)
     if not os.path.isfile(path):
@@ -123,20 +123,20 @@ def _binary_triage_impl(path: str) -> str:
 
 
 @mcp.tool()
-def binary_triage(path: str) -> str:
+def pwn_triage(path: str) -> str:
     """Comprehensive one-shot binary analysis — runs file, checksec, rabin2 and returns structured JSON.
 
     Provides file type, security mitigations, interesting strings, imports/exports,
     sections, architecture, and flags dangerous functions.
     """
-    return _binary_triage_impl(path)
+    return _pwn_triage_impl(path)
 
 
 # ── disassemble ──────────────────────────────────────────────────────────────
 
 
 @mcp.tool()
-def binary_disassemble(path: str, function: str = "main", count: int = 50) -> str:
+def pwn_disassemble(path: str, function: str = "main", count: int = 50) -> str:
     """Disassemble a function or address range from a binary using radare2.
 
     Args:
@@ -175,7 +175,7 @@ def binary_disassemble(path: str, function: str = "main", count: int = 50) -> st
 
 
 @mcp.tool()
-def binary_rop_gadgets(
+def pwn_rop_gadgets(
     path: str, search: str = "", max_depth: int = 5, max_results: int = 50
 ) -> str:
     """Search for ROP gadgets in a binary using ROPgadget.
@@ -218,7 +218,7 @@ def binary_rop_gadgets(
 
 
 @mcp.tool()
-def binary_pattern_offset(
+def pwn_pattern_offset(
     action: str = "create", length: int = 200, value: str = ""
 ) -> str:
     """Generate cyclic patterns or find offset from a crash value using pwntools.
@@ -261,7 +261,7 @@ def binary_pattern_offset(
 
 
 @mcp.tool()
-def binary_shellcode_generate(
+def pwn_shellcode_generate(
     arch: str = "amd64",
     os_name: str = "linux",
     payload: str = "sh",
@@ -316,7 +316,7 @@ def binary_shellcode_generate(
 
 
 @mcp.tool()
-def binary_pwntools_template(
+def pwn_pwntools_template(
     path: str,
     remote: str = "",
     technique: str = "ret2win",
@@ -333,7 +333,7 @@ def binary_pwntools_template(
     path = os.path.realpath(path)
 
     # Get binary info
-    triage = json.loads(_binary_triage_impl(path))
+    triage = json.loads(_pwn_triage_impl(path))
     arch = triage.get("arch", "x86")
     bits = triage.get("bits", "64")
 
@@ -503,7 +503,7 @@ def binary_pwntools_template(
 
 
 @mcp.tool()
-def binary_angr_analyze(
+def pwn_angr_analyze(
     path: str,
     mode: str = "auto",
     target_addr: str = "",
