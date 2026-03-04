@@ -1,11 +1,11 @@
 # CTF-Buster
 
-AI-powered CTF competition toolkit. Rust CLI + 6 MCP servers (41 tools total).
+AI-powered CTF competition toolkit. Rust CLI + 6 MCP servers (42 tools total).
 
 ## Architecture
 
 ```
-ctf-buster (Rust)      — 11 tools: platform interaction (CTFd/rCTF), queue management
+ctf-buster (Rust)      — 12 tools: platform interaction (CTFd/rCTF), queue management, writeups
 ctf-crypto (Python)    — 6 tools: encoding chains, RSA attacks, constraint solving
 ctf-binary (Python)    — 8 tools: triage, disassembly, ROP, pwntools, angr
 ctf-forensics (Python) — 5 tools: file analysis, stego, extraction, entropy
@@ -133,7 +133,10 @@ Subagent prompt pattern:
       ask for confirmation, do NOT continue analysis before submitting.
    5. If the flag is correct, report back as solved.
       If incorrect, continue analysis and try other candidates.
-   6. Report back: solved/unsolved/needs-help"
+   6. After a correct flag submission, call ctf_save_writeup('{name}',
+      methodology='<how you solved it>', tools_used=['<tools>']) to
+      document the solution for the team.
+   7. Report back: solved/unsolved/needs-help"
 
 Launch subagent with:
   model: select based on category + difficulty (see Model Selection)
@@ -219,6 +222,35 @@ For parallel execution, launch multiple subagents in a single message using the 
 - **Notifications** — `ctf_notifications()` fetches platform announcements which may
   contain hints, errata, or flag format changes
 
+### 8. Post-Solve Documentation
+
+After every successful flag submission, subagents MUST call `ctf_save_writeup` to document the solution:
+
+```
+ctf_save_writeup(
+  challenge: "challenge-name",
+  methodology: "Detailed description of approach...",
+  tools_used: ["tool1", "tool2", "python", ...]
+)
+```
+
+Methodology should include:
+- What vulnerability or technique was exploited
+- Key observations that led to the solution
+- Any dead ends encountered and why they didn't work
+- The step-by-step process from triage to flag
+
+This generates a `writeup.md` in the challenge directory alongside `solve.py` and `notes.md`.
+
+### 9. TUI Dashboard
+
+Run `ctf dashboard` in a separate terminal to monitor progress in real-time while the
+orchestrator works. The dashboard polls `.ctf-state.json` every 2 seconds and shows:
+- Challenge table with solve status
+- Orchestration queue (queued/in-progress/failed)
+- Category breakdown
+- Platform notifications
+
 ## Development
 
 ### Build & Test
@@ -240,6 +272,7 @@ src/                    Rust CLI + MCP server
   cli/                  CLI command handlers
   config/               Workspace config (.ctf.toml)
   mcp/                  MCP server (rmcp)
+  tui/                  TUI dashboard (ratatui)
   platform/             CTFd + rCTF API clients
   workspace/            Scaffolding + state management
 tools/                  Python MCP servers

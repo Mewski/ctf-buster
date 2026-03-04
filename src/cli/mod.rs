@@ -103,6 +103,9 @@ pub enum Command {
     id_or_name: String,
   },
 
+  /// Launch the TUI monitoring dashboard
+  Dashboard,
+
   /// Run as an MCP server (stdio transport)
   Mcp {
     /// Workspace directory (defaults to CTF_WORKSPACE env or auto-detected)

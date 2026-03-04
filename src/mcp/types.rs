@@ -68,3 +68,17 @@ pub struct QueueUpdateParams {
   )]
   pub queue_json: Option<String>,
 }
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct WriteupParams {
+  #[schemars(description = "Challenge name (must already exist in state — submit the flag first)")]
+  pub challenge: String,
+  #[schemars(
+    description = "How the challenge was solved — approach, key insights, steps taken"
+  )]
+  pub methodology: String,
+  #[schemars(
+    description = "List of tools/techniques used (e.g., [\"rsa_toolkit\", \"transform_chain\", \"python\"])"
+  )]
+  pub tools_used: Vec<String>,
+}

@@ -1,10 +1,10 @@
 # MCP Tools Reference
 
-CTF-Buster provides 41 tools across 6 MCP servers.
+CTF-Buster provides 42 tools across 6 MCP servers.
 
-## ctf-buster (Rust) -- 11 tools
+## ctf-buster (Rust) -- 12 tools
 
-Platform interaction, workspace management, and orchestration.
+Platform interaction, workspace management, orchestration, and documentation.
 
 | Tool | Description |
 |------|-------------|
@@ -20,6 +20,7 @@ Platform interaction, workspace management, and orchestration.
 | `ctf_notifications` | Get competition notifications/announcements from the platform. |
 | `ctf_queue_status` | Get the challenge priority queue -- shows what to solve next, what's in progress, and what failed. Persists across agent restarts. |
 | `ctf_queue_update` | Update the challenge queue -- set priorities, mark challenges as in-progress, completed, or failed. Actions: `set_queue`, `start`, `complete`, `fail`, `clear`. |
+| `ctf_save_writeup` | Save a writeup for a solved challenge -- records methodology and tools used, generates `writeup.md` in the challenge directory. Call after submitting a flag. |
 
 ## ctf-crypto (Python) -- 6 tools
 

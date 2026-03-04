@@ -13,7 +13,7 @@ Model Context Protocol, allowing AI agents to orchestrate CTF challenge solving.
     |        |        |                   |         |        |
 ctf-buster ctf-crypto ctf-binary  ctf-forensics  ctf-gdb  ctf-re
   (Rust)   (Python)   (Python)     (Python)     (Python) (Python)
- 11 tools  6 tools    8 tools      5 tools      5 tools  6 tools
+ 12 tools  6 tools    8 tools      5 tools      5 tools  6 tools
     |          |          |            |            |        |
  CTFd/rCTF  sympy,z3  radare2,pwn  binwalk,    GDB      radare2
  platforms  crypto    ROPgadget    zsteg,PIL   batch     r2ghidra
@@ -51,8 +51,12 @@ src/
     mod.rs             Module exports
     table.rs           Table formatting for CLI display
   mcp/
-    mod.rs             MCP server with 9 tools (rmcp framework)
+    mod.rs             MCP server with 12 tools (rmcp framework)
     types.rs           MCP parameter types (schemars for JSON schema)
+  tui/
+    mod.rs             Module exports
+    app.rs             Dashboard app state and event loop
+    ui.rs              Ratatui widget layout and rendering
 ```
 
 ### Python (`tools/`)

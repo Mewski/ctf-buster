@@ -494,6 +494,72 @@ impl McpServer {
     let json = serde_json::to_string_pretty(&notifications).map_err(to_mcp_error)?;
     Ok(CallToolResult::success(vec![Content::text(json)]))
   }
+
+  #[tool(
+    description = "Save a writeup for a solved challenge — records methodology and tools used, generates writeup.md in the challenge directory. Call this AFTER successfully submitting a flag."
+  )]
+  async fn ctf_save_writeup(
+    &self,
+    Parameters(params): Parameters<WriteupParams>,
+  ) -> Result<CallToolResult, McpError> {
+    let challenge_name = params.challenge.trim();
+    if challenge_name.is_empty() {
+      return Err(McpError::invalid_params(
+        "Challenge name cannot be empty",
+        None,
+      ));
+    }
+
+    state::save_writeup(
+      &self.workspace_root,
+      challenge_name,
+      &params.methodology,
+      &params.tools_used,
+    )
+    .map_err(to_mcp_error)?;
+
+    let ws_state = state::load_state(&self.workspace_root).map_err(to_mcp_error)?;
+    let key = challenge_name.to_lowercase();
+    let challenge_state = ws_state.challenges.get(&key).ok_or_else(|| {
+      McpError::invalid_params(
+        format!(
+          "Challenge '{}' not found in state. Submit the flag first.",
+          challenge_name
+        ),
+        None,
+      )
+    })?;
+
+    let writeup_content = scaffold::generate_writeup(challenge_state);
+
+    let pseudo_challenge = crate::platform::types::Challenge {
+      id: challenge_state.id.clone(),
+      name: challenge_state.name.clone(),
+      category: challenge_state.category.clone(),
+      description: String::new(),
+      value: challenge_state.points.unwrap_or(0),
+      solves: 0,
+      solved_by_me: true,
+      files: vec![],
+      tags: vec![],
+      hints: vec![],
+    };
+    let challenge_dir = scaffold::challenge_dir(
+      &self.workspace_root,
+      &pseudo_challenge,
+      &self.workspace_config.scaffold,
+    );
+
+    if challenge_dir.exists() {
+      scaffold::save_writeup_file(&challenge_dir, &writeup_content).map_err(to_mcp_error)?;
+    }
+
+    Ok(CallToolResult::success(vec![Content::text(format!(
+      "Writeup saved for '{}' at {}/writeup.md",
+      challenge_name,
+      challenge_dir.display(),
+    ))]))
+  }
 }
 
 #[tool_handler]
@@ -509,7 +575,9 @@ impl ServerHandler for McpServer {
          IMPORTANT: Always auto-submit flags immediately when found — call \
          ctf_submit_flag as soon as you find any flag-like string (e.g. flag{...}, \
          CTF{...}). Do not wait or ask for confirmation. The tool returns whether \
-         the flag was correct, so there is no risk in submitting."
+         the flag was correct, so there is no risk in submitting. \
+         After a correct submission, call ctf_save_writeup to document how \
+         you solved the challenge."
           .to_string(),
       )
   }

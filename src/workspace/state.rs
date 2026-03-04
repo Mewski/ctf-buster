@@ -41,6 +41,10 @@ pub struct ChallengeState {
   pub tags: Option<Vec<String>>,
   #[serde(default)]
   pub details_fetched_at: Option<DateTime<Utc>>,
+  #[serde(default)]
+  pub methodology: Option<String>,
+  #[serde(default)]
+  pub tools_used: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -143,6 +147,8 @@ pub fn update_sync(workspace_root: &Path, challenges: &[Challenge]) -> Result<()
         files: None,
         tags: None,
         details_fetched_at: None,
+        methodology: None,
+        tools_used: None,
       });
 
     entry.id = c.id.clone();
@@ -181,6 +187,8 @@ pub fn update_sync_full(workspace_root: &Path, challenges: &[Challenge]) -> Resu
         files: None,
         tags: None,
         details_fetched_at: None,
+        methodology: None,
+        tools_used: None,
       });
 
     entry.id = c.id.clone();
@@ -292,6 +300,8 @@ pub fn mark_solved(
     files: None,
     tags: None,
     details_fetched_at: None,
+    methodology: None,
+    tools_used: None,
   });
 
   entry.status = ChallengeStatus::Solved;
@@ -331,6 +341,24 @@ pub fn update_orchestration(
   let mut state = load_state(workspace_root)?;
   state.orchestration = orchestration;
   write_state(workspace_root, &state)
+}
+
+pub fn save_writeup(
+  workspace_root: &Path,
+  challenge_name: &str,
+  methodology: &str,
+  tools_used: &[String],
+) -> Result<()> {
+  let mut state = load_state(workspace_root)?;
+  let key = challenge_name.to_lowercase();
+
+  if let Some(entry) = state.challenges.get_mut(&key) {
+    entry.methodology = Some(methodology.to_string());
+    entry.tools_used = Some(tools_used.to_vec());
+    write_state(workspace_root, &state)?;
+  }
+
+  Ok(())
 }
 
 #[cfg(test)]
@@ -651,6 +679,8 @@ mod tests {
         files: None,
         tags: Some(vec!["easy".into()]),
         details_fetched_at: None,
+        methodology: None,
+        tools_used: None,
       },
     );
 

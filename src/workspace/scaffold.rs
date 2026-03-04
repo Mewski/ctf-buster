@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::config::types::ScaffoldConfig;
 use crate::error::Result;
 use crate::platform::types::Challenge;
+use crate::workspace::state::ChallengeState;
 
 /// Returns the directory path for a challenge based on the scaffold template.
 pub fn challenge_dir(
@@ -99,6 +100,50 @@ from pwn import *
     category = challenge.category,
     value = challenge.value,
   )
+}
+
+pub fn generate_writeup(challenge_state: &ChallengeState) -> String {
+  let mut doc = format!(
+    "# {} -- Writeup\n\n\
+     **Category:** {}\n\
+     **Points:** {}\n\
+     **Flag:** `{}`\n",
+    challenge_state.name,
+    challenge_state.category,
+    challenge_state
+      .points
+      .map(|p| p.to_string())
+      .unwrap_or_else(|| "?".into()),
+    challenge_state.flag.as_deref().unwrap_or("?"),
+  );
+
+  if let Some(solved_at) = &challenge_state.solved_at {
+    doc.push_str(&format!(
+      "**Solved:** {}\n",
+      solved_at.format("%Y-%m-%d %H:%M UTC")
+    ));
+  }
+
+  if let Some(desc) = &challenge_state.description {
+    doc.push_str(&format!("\n## Description\n\n{desc}\n"));
+  }
+
+  if let Some(methodology) = &challenge_state.methodology {
+    doc.push_str(&format!("\n## Methodology\n\n{methodology}\n"));
+  }
+
+  if let Some(tools) = &challenge_state.tools_used {
+    doc.push_str("\n## Tools Used\n\n");
+    for tool in tools {
+      doc.push_str(&format!("- {tool}\n"));
+    }
+  }
+
+  doc
+}
+
+pub fn save_writeup_file(challenge_dir: &Path, content: &str) -> std::io::Result<()> {
+  std::fs::write(challenge_dir.join("writeup.md"), content)
 }
 
 fn generate_notes_template(challenge: &Challenge) -> String {

@@ -4,6 +4,7 @@ mod error;
 mod mcp;
 mod output;
 mod platform;
+mod tui;
 mod workspace;
 
 use clap::Parser;
@@ -130,6 +131,13 @@ async fn run(cli: Cli) -> error::Result<()> {
       let cwd = std::env::current_dir()?;
       let root = config::find_workspace_root(&cwd).ok_or(error::Error::NotInWorkspace)?;
       cli::workspace::handle_files(&root, &id_or_name).await?;
+    }
+
+    Command::Dashboard => {
+      let cwd = std::env::current_dir()?;
+      let root = config::find_workspace_root(&cwd).ok_or(error::Error::NotInWorkspace)?;
+      let ws_config = config::load_workspace_config(&root)?;
+      tui::run_dashboard(root, ws_config.workspace.name).await?;
     }
 
     Command::Mcp { workspace, token } => {
